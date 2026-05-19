@@ -35,34 +35,36 @@ class _MainShellState extends State<MainShell> {
   Widget build(BuildContext context) {
     final appState = Provider.of<AppStateProvider>(context);
     final isDark = appState.isDarkMode;
+    final primaryColor = const Color(0xFF1565C0);
 
     return Scaffold(
       body: IndexedStack(index: _currentIndex, children: _pages),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (i) => setState(() => _currentIndex = i),
-        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        backgroundColor: isDark ? const Color(0xFF1A1A1A) : Colors.white,
         elevation: 8,
-        indicatorColor: isDark ? const Color(0xFF1565C0).withOpacity(0.3) : const Color(0xFF1565C0).withOpacity(0.1),
+        indicatorColor: isDark ? primaryColor.withOpacity(0.2) : const Color(0xFFE3F2FD),
+        animationDuration: const Duration(milliseconds: 300),
         destinations: [
           NavigationDestination(
-            icon: Icon(Icons.chat_bubble_outline, color: isDark ? Colors.white70 : Colors.black87),
-            selectedIcon: const Icon(Icons.chat_bubble, color: Color(0xFF1565C0)),
+            icon: Icon(Icons.chat_outlined, color: isDark ? Colors.white70 : Colors.black87),
+            selectedIcon: Icon(Icons.chat, color: primaryColor),
             label: 'Agent',
           ),
           NavigationDestination(
-            icon: Icon(Icons.bookmark_border, color: isDark ? Colors.white70 : Colors.black87),
-            selectedIcon: const Icon(Icons.bookmark, color: Color(0xFF1565C0)),
+            icon: Icon(Icons.calendar_today_outlined, color: isDark ? Colors.white70 : Colors.black87),
+            selectedIcon: Icon(Icons.calendar_today, color: primaryColor),
             label: 'Bookings',
           ),
           NavigationDestination(
             icon: Icon(Icons.notifications_outlined, color: isDark ? Colors.white70 : Colors.black87),
-            selectedIcon: const Icon(Icons.notifications, color: Color(0xFF1565C0)),
+            selectedIcon: Icon(Icons.notifications, color: primaryColor),
             label: 'Alerts',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined, color: isDark ? Colors.white70 : Colors.black87),
-            selectedIcon: const Icon(Icons.settings, color: Color(0xFF1565C0)),
+            selectedIcon: Icon(Icons.settings, color: primaryColor),
             label: 'Settings',
           ),
         ],

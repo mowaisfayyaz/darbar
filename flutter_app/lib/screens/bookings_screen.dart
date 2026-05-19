@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:dio/dio.dart';
 import 'package:provider/provider.dart';
+import '../services/api_service.dart';
 import '../services/theme_provider.dart';
 import 'booking_confirmed_screen.dart';
 
@@ -13,6 +13,7 @@ class BookingsScreen extends StatefulWidget {
 }
 
 class _BookingsScreenState extends State<BookingsScreen> {
+  final ApiService _api = ApiService();
   List<dynamic> _bookings = [];
   bool _isLoading = true;
   String? _error;
@@ -24,29 +25,45 @@ class _BookingsScreenState extends State<BookingsScreen> {
   }
 
   Future<void> _fetchBookings() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
+    setState(() { _isLoading = true; _error = null; });
     try {
-      final dio = Dio();
-      final response = await dio.get('http://127.0.0.1:8000/api/bookings/user/${widget.userId}/');
-      setState(() {
-        _bookings = response.data;
-        _isLoading = false;
-      });
-    } on DioException catch (e) {
-      setState(() {
-        _error = e.response?.data['error'] ?? 'Failed to load bookings. Please swipe down to refresh.';
-        _isLoading = false;
-      });
+      final bookings = await _api.getUserBookings(widget.userId);
+      if (mounted) {
+        setState(() {
+          _bookings = bookings;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _error = 'Something went wrong: $e';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = 'Failed to load bookings. Pull down to retry.';
+          _isLoading = false;
+        });
+      }
     }
+  }
+
+  void _openBookingDetails(dynamic booking) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BookingConfirmedScreen(
+          bookingData: {
+            'booking_id': booking['id'],
+            'human_booking_id': booking['booking_id'],
+            'provider_name': booking['provider']?['business_name'] ?? 'Provider',
+            'provider_rating': booking['provider']?['rating'] ?? 0,
+            'provider_phone': booking['provider']?['phone'],
+            'provider_area': booking['provider']?['area'],
+            'provider_reviews': booking['provider']?['review_count'],
+            'service_type': booking['service_type'],
+            'location': booking['location'],
+            'message': 'View agent traces below for detailed reasoning.',
+          },
+        ),
+      ),
+    );
   }
 
   @override
@@ -58,6 +75,9 @@ class _BookingsScreenState extends State<BookingsScreen> {
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F7FA),
       appBar: AppBar(
         title: const Text('My Bookings', style: TextStyle(fontWeight: FontWeight.bold)),
+        actions: [
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchBookings),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: _fetchBookings,
@@ -65,172 +85,199 @@ class _BookingsScreenState extends State<BookingsScreen> {
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : _error != null
-                ? ListView(
-                    padding: const EdgeInsets.all(24),
-                    children: [
-                      const SizedBox(height: 100),
-                      const Icon(Icons.error_outline, size: 64, color: Colors.red),
-                      const SizedBox(height: 16),
-                      Text(
-                        _error!,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey, fontSize: 16),
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton(
-                        onPressed: _fetchBookings,
-                        child: const Text('Try Again'),
-                      ),
-                    ],
-                  )
+                ? _buildErrorState(isDark)
                 : _bookings.isEmpty
-                    ? ListView(
-                        padding: const EdgeInsets.all(24),
-                        children: [
-                          const SizedBox(height: 100),
-                          Container(
-                            padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1565C0).withOpacity(0.08),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.book_online_outlined, size: 64, color: Color(0xFF1565C0)),
-                          ),
-                          const SizedBox(height: 24),
-                          Text(
-                            'No bookings yet',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: isDark ? Colors.white : Colors.black87,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Go to the Chat Agent tab and request a service to create one!',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: isDark ? Colors.grey[400] : Colors.grey,
-                              fontSize: 15,
-                            ),
-                          ),
-                        ],
-                      )
+                    ? _buildEmptyState(isDark)
                     : ListView.builder(
                         padding: const EdgeInsets.all(16),
                         itemCount: _bookings.length,
-                        itemBuilder: (context, index) {
-                          final booking = _bookings[index];
-                          final status = booking['status'] ?? 'pending';
-                          
-                          Color statusColor;
-                          switch (status) {
-                            case 'confirmed':
-                              statusColor = Colors.green;
-                              break;
-                            case 'completed':
-                              statusColor = Colors.blue;
-                              break;
-                            case 'cancelled':
-                              statusColor = Colors.red;
-                              break;
-                            default:
-                              statusColor = Colors.orange;
-                          }
-
-                          return Card(
-                            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-                            margin: const EdgeInsets.only(bottom: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            elevation: 2,
-                            child: InkWell(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => BookingConfirmedScreen(
-                                      bookingData: {
-                                        'booking_id': booking['id'],
-                                        'provider_name': booking['provider'] != null ? booking['provider']['business_name'] : 'Searching...',
-                                        'provider_rating': booking['provider'] != null ? booking['provider']['rating'] : 0.0,
-                                        'message': 'Booking ID: ${booking['booking_id']}\nService: ${booking['service_type']}\nLocation: ${booking['location']}\nStatus: ${booking['status']}',
-                                      },
-                                    ),
-                                  ),
-                                );
-                              },
-                              borderRadius: BorderRadius.circular(16),
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          booking['booking_id'] ?? 'BK-XXXXXX',
-                                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
-                                        ),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                          decoration: BoxDecoration(
-                                            color: statusColor.withOpacity(0.12),
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                          child: Text(
-                                            status.toUpperCase(),
-                                            style: TextStyle(
-                                              color: statusColor,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        )
-                                      ],
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      booking['service_type'] ?? 'General Service',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: isDark ? Colors.white : Colors.black87,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Row(
-                                      children: [
-                                        const Icon(Icons.location_on_outlined, size: 16, color: Colors.grey),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          booking['location'] ?? 'Unknown location',
-                                          style: const TextStyle(color: Colors.grey),
-                                        ),
-                                      ],
-                                    ),
-                                    const Divider(height: 24),
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          'Requested: ${booking['created_at'].toString().substring(0, 10)}',
-                                          style: const TextStyle(fontSize: 12, color: Colors.grey),
-                                        ),
-                                        const Text(
-                                          'Details ➔',
-                                          style: TextStyle(color: Color(0xFF1565C0), fontWeight: FontWeight.bold),
-                                        )
-                                      ],
-                                    )
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        },
+                        itemBuilder: (context, index) => _buildBookingCard(_bookings[index], isDark),
                       ),
+      ),
+    );
+  }
+
+  Widget _buildErrorState(bool isDark) {
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        const SizedBox(height: 100),
+        const Icon(Icons.error_outline, size: 64, color: Colors.red),
+        const SizedBox(height: 16),
+        Text(_error!, textAlign: TextAlign.center, style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey, fontSize: 16)),
+        const SizedBox(height: 24),
+        Center(
+          child: ElevatedButton(onPressed: _fetchBookings, child: const Text('Try Again')),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState(bool isDark) {
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        const SizedBox(height: 80),
+        Container(
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1565C0).withOpacity(isDark ? 0.12 : 0.08),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.calendar_today_outlined, size: 56, color: Color(0xFF1565C0)),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'No bookings yet',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Your service bookings will appear here once you make a request through the AI agent.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey, fontSize: 14, height: 1.4),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBookingCard(dynamic booking, bool isDark) {
+    final status = booking['status'] ?? 'pending';
+    
+    Color statusColor;
+    IconData statusIcon;
+    switch (status) {
+      case 'confirmed':
+        statusColor = Colors.green;
+        statusIcon = Icons.check_circle;
+        break;
+      case 'completed':
+        statusColor = Colors.blue;
+        statusIcon = Icons.done_all;
+        break;
+      case 'cancelled':
+        statusColor = Colors.red;
+        statusIcon = Icons.cancel;
+        break;
+      default:
+        statusColor = Colors.orange;
+        statusIcon = Icons.schedule;
+    }
+
+    return GestureDetector(
+      onTap: () => _openBookingDetails(booking),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 14),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(isDark ? 0.15 : 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Flexible(
+                  child: Text(
+                    booking['booking_id'] ?? 'BK-XXXX',
+                    style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey, fontWeight: FontWeight.bold, fontSize: 13),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(statusIcon, size: 14, color: statusColor),
+                      const SizedBox(width: 4),
+                      Text(
+                        status.toUpperCase(),
+                        style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Service type
+            Text(
+              booking['service_type'] ?? 'Service',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 6),
+
+            // Location
+            Row(
+              children: [
+                Icon(Icons.location_on_outlined, size: 16, color: isDark ? Colors.grey[400] : Colors.grey),
+                const SizedBox(width: 4),
+                Text(
+                  booking['location'] ?? 'Unknown',
+                  style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 13),
+                ),
+              ],
+            ),
+
+            // Provider info
+            if (booking['provider'] != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.person_outline, size: 16, color: isDark ? Colors.grey[400] : Colors.grey),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      booking['provider']['business_name'] ?? '',
+                      style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 13),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.star, size: 14, color: Colors.amber),
+                  const SizedBox(width: 2),
+                  Text(
+                    '${booking['provider']['rating'] ?? 0}',
+                    style: TextStyle(fontSize: 12, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ],
+
+            // Tap hint
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text(
+                  'Tap for details & agent traces →',
+                  style: TextStyle(fontSize: 11, color: const Color(0xFF1565C0).withOpacity(0.7)),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

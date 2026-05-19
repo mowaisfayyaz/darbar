@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:dio/dio.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../services/api_service.dart';
 import '../services/theme_provider.dart';
 import 'login_screen.dart';
 
@@ -22,7 +22,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _googleLinked = false;
   String? _googleEmail;
   bool _loadingGoogle = true;
-  final _dio = Dio();
+  final _api = ApiService();
 
   @override
   void initState() {
@@ -33,14 +33,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _checkGoogleStatus() async {
     setState(() => _loadingGoogle = true);
     try {
-      final response = await _dio.get('http://127.0.0.1:8000/api/auth/google/status/');
-      if (response.statusCode == 200) {
-        setState(() {
-          _googleLinked = response.data['linked'] ?? false;
-          _googleEmail = response.data['email'];
-          _loadingGoogle = false;
-        });
-      }
+      final data = await _api.getGoogleAuthStatus();
+      setState(() {
+        _googleLinked = data['linked'] ?? false;
+        _googleEmail = data['email'];
+        _loadingGoogle = false;
+      });
     } catch (e) {
       setState(() => _loadingGoogle = false);
     }
@@ -48,28 +46,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _connectGoogle() async {
     try {
-      final response = await _dio.get('http://127.0.0.1:8000/api/auth/google/url/');
-      if (response.statusCode == 200) {
-        final url = response.data['url'];
-        if (url != null) {
-          final uri = Uri.parse(url);
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Opening Google OAuth in a new tab...'),
-                backgroundColor: Colors.blue,
-              ),
-            );
-          }
+      final url = await _api.getGoogleAuthUrl();
+      if (url != null) {
+        final uri = Uri.parse(url);
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Opening Google OAuth in a new tab...'),
+              backgroundColor: Colors.blue,
+            ),
+          );
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to get authorization URL: $e'),
-            backgroundColor: Colors.red,
+            content: Text('Google OAuth not configured yet. You can set it up later.'),
+            backgroundColor: Colors.orange,
           ),
         );
       }
@@ -100,21 +95,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() => _loadingGoogle = true);
     try {
-      final response = await _dio.post('http://127.0.0.1:8000/api/auth/google/disconnect/');
-      if (response.statusCode == 200) {
-        setState(() {
-          _googleLinked = false;
-          _googleEmail = null;
-          _loadingGoogle = false;
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Google account disconnected successfully.'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
+      await _api.disconnectGoogle();
+      setState(() {
+        _googleLinked = false;
+        _googleEmail = null;
+        _loadingGoogle = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Google account disconnected successfully.'),
+            backgroundColor: Colors.green,
+          ),
+        );
       }
     } catch (e) {
       setState(() => _loadingGoogle = false);
@@ -142,13 +135,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (context) => const LoginScreen()),
-                (route) => false,
-              );
+              final appState = Provider.of<AppStateProvider>(context, listen: false);
+              await appState.clearSession();
+              if (mounted) {
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                  (route) => false,
+                );
+              }
             },
             child: const Text('Logout'),
           ),

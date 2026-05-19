@@ -23,7 +23,7 @@ class _ProviderShellState extends State<ProviderShell> {
   void initState() {
     super.initState();
     _pages = [
-      const ProviderDashboard(),
+      ProviderDashboard(providerId: widget.providerId, providerName: widget.providerName),
       NotificationsScreen(userId: widget.providerId, isProviderTheme: true),
       SettingsScreen(userId: widget.providerId, userName: widget.providerName, isProviderTheme: true),
     ];

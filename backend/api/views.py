@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth.hashers import make_password, check_password
 from django.db.models import Q
-from .models import User, Provider, Booking, AgentLog, Notification
+from .models import User, Provider, Booking, BookingAttempt, AgentLog, Notification
 from .serializers import ProviderSerializer, BookingSerializer, AgentLogSerializer
 
 from agents.intent_agent import extract_intent
@@ -98,7 +98,9 @@ def login(request):
 
 @api_view(['GET'])
 def get_notifications(request, user_id):
-    notifications = Notification.objects.filter(user_id=user_id).order_by('-created_at')[:20]
+    notifications = Notification.objects.filter(
+        Q(user_id=user_id) | Q(provider_id=user_id)
+    ).order_by('-created_at')[:20]
     data = [{'id': str(n.id), 'title': n.title, 'body': n.body, 'is_read': n.is_read, 'created_at': str(n.created_at)} for n in notifications]
     return Response(data)
 
@@ -126,6 +128,11 @@ def process_request(request):
     """
     Main orchestrator entry point.
     Expects: {"user_id": "uuid", "text": "Mujhe kal subah G-13 mein AC technician chahiye"}
+    
+    Flow:
+    1. Extract intent (clarification queries do NOT create bookings)
+    2. If intent is complete → create booking → discover → rank → decide → book → followup
+    3. Return rich response with all provider details
     """
     user_id = request.data.get('user_id')
     raw_text = request.data.get('text')
@@ -138,62 +145,100 @@ def process_request(request):
     except User.DoesNotExist:
         return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    booking_id_human = f"BK-2026-{get_random_string(6).upper()}"
-    booking = Booking.objects.create(
-        booking_id=booking_id_human,
-        user=user,
-        service_type="Unknown",
-        location="Unknown"
-    )
-
     try:
-        intent_data = extract_intent(raw_text, booking_id=booking.id)
+        # Step 1: Extract intent (no booking created yet)
+        intent_data = extract_intent(raw_text)
         
+        # If the intent needs clarification, respond without creating a booking
         if intent_data.get('needs_clarification', False):
-            booking.status = 'cancelled'
-            booking.service_type = intent_data.get('service_type', 'Unknown')
-            booking.location = intent_data.get('location', 'Unknown')
-            booking.save()
             return Response({
                 "status": "clarification",
-                "booking_id": str(booking.id),
-                "message": intent_data.get('reply_message', 'Please provide service type, location, and time details.')
+                "message": intent_data.get('reply_message', 'Please provide service type, location, and time details.'),
+                "intent": {
+                    "service_type": intent_data.get('service_type'),
+                    "location": intent_data.get('location'),
+                    "time_preference": intent_data.get('time_preference'),
+                    "language_detected": intent_data.get('language_detected'),
+                }
             }, status=status.HTTP_200_OK)
 
-        booking.service_type = intent_data.get('service_type', 'Unknown')
-        booking.location = intent_data.get('location', 'Unknown')
-        booking.save()
+        # Step 2: Intent is complete — NOW create the booking
+        booking_id_human = f"BK-2026-{get_random_string(6).upper()}"
+        booking = Booking.objects.create(
+            booking_id=booking_id_human,
+            user=user,
+            service_type=intent_data.get('service_type', 'Unknown'),
+            location=intent_data.get('location', 'Unknown')
+        )
 
+        # Log the intent extraction with the booking
+        AgentLog.objects.create(
+            booking=booking,
+            agent_name="Intent Agent",
+            action_taken="Extracted search intent from user query",
+            reasoning=f"Service: {intent_data.get('service_type')}, Location: {intent_data.get('location')}, Time: {intent_data.get('time_preference')}, Language: {intent_data.get('language_detected')}. Special: {intent_data.get('special_requirements', 'None')}"
+        )
+
+        # Step 3: Discover providers
         candidates = discover_providers(intent_data, booking_id=booking.id)
+        
+        # Step 4: Rank candidates
         ranked_candidates = rank_candidates(candidates, target_location=booking.location, booking_id=booking.id)
 
+        # Step 5: Make decision
         language = intent_data.get('language_detected', 'en')
         selected_provider_data, reasoning = make_decision(ranked_candidates, booking_id=booking.id, language=language)
 
         if not selected_provider_data:
             booking.status = 'cancelled'
             booking.save()
-            return Response({"status": "failed", "reason": reasoning, "booking_id": str(booking.id)})
+            return Response({
+                "status": "failed", 
+                "reason": reasoning, 
+                "booking_id": str(booking.id),
+                "human_booking_id": booking.booking_id
+            })
 
+        # Step 6: Book with the selected provider
         provider = Provider.objects.get(id=selected_provider_data['id'])
         booking.provider = provider
         booking.save()
 
         attempt = attempt_booking(booking_obj=booking, provider_obj=provider)
+        
+        # Step 7: Schedule follow-up reminders
         schedule_reminders(booking)
+
+        # Create notifications for both user and provider
+        Notification.objects.create(
+            user=user,
+            title="Booking Request Sent",
+            body=f"Your booking {booking.booking_id} for {booking.service_type} has been sent to {provider.business_name}. Waiting for confirmation."
+        )
+        Notification.objects.create(
+            provider=provider,
+            title="New Booking Request",
+            body=f"New {booking.service_type} request from {user.name} at {booking.location}. Booking ID: {booking.booking_id}."
+        )
 
         return Response({
             "status": "processing",
             "booking_id": str(booking.id),
             "human_booking_id": booking.booking_id,
             "message": reasoning,
+            "service_type": booking.service_type,
+            "location": booking.location,
             "provider_name": provider.business_name,
             "provider_rating": provider.rating,
+            "provider_phone": provider.phone,
+            "provider_area": provider.area,
+            "provider_reviews": provider.review_count,
+            "provider_category": provider.category,
         })
 
     except Exception as e:
+        # Log system errors
         AgentLog.objects.create(
-            booking=booking,
             agent_name="System",
             action_taken="Error processing request",
             reasoning=str(e)
@@ -245,10 +290,181 @@ def confirm_booking(request):
         booking = Booking.objects.get(id=booking_id)
         booking.status = 'confirmed' if new_status == 'accepted' else 'cancelled'
         booking.save()
+        
+        # Update the booking attempt
+        attempt = BookingAttempt.objects.filter(booking=booking).order_by('-sent_at').first()
+        if attempt:
+            from django.utils import timezone
+            attempt.status = new_status
+            attempt.responded_at = timezone.now()
+            attempt.save()
+        
+        # Create notification for user
+        status_msg = "confirmed" if new_status == 'accepted' else "cancelled"
+        if booking.user:
+            provider_name = booking.provider.business_name if booking.provider else "Provider"
+            Notification.objects.create(
+                user=booking.user,
+                title=f"Booking {status_msg.title()}",
+                body=f"Your booking {booking.booking_id} has been {status_msg} by {provider_name}."
+            )
+        
+        # Log the decision
+        AgentLog.objects.create(
+            booking=booking,
+            agent_name="Booking Agent",
+            action_taken=f"Provider {new_status} the booking",
+            reasoning=f"Booking {booking.booking_id} has been {status_msg} by the provider."
+        )
+        
         return Response({'status': booking.status, 'booking_id': str(booking.id)})
     except Booking.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 
+
+# ==================== PROVIDER ENDPOINTS ====================
+
+@api_view(['GET'])
+def get_provider_bookings(request, provider_id):
+    """
+    Get all bookings assigned to a specific provider.
+    Returns pending bookings first, then confirmed, then completed.
+    """
+    bookings = Booking.objects.filter(provider_id=provider_id).order_by(
+        # Custom ordering: pending first, then confirmed, then others
+        '-created_at'
+    )
+    serializer = BookingSerializer(bookings, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['POST'])
+def provider_respond(request):
+    """
+    Provider accepts or declines a booking request.
+    Expects: {booking_id: uuid, provider_id: uuid, action: 'accept'|'decline'}
+    """
+    booking_id = request.data.get('booking_id')
+    provider_id = request.data.get('provider_id')
+    action = request.data.get('action')
+
+    if not booking_id or not provider_id or action not in ('accept', 'decline'):
+        return Response(
+            {'error': 'booking_id, provider_id, and valid action (accept/decline) required.'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        booking = Booking.objects.get(id=booking_id, provider_id=provider_id)
+    except Booking.DoesNotExist:
+        return Response({'error': 'Booking not found or not assigned to this provider.'}, status=status.HTTP_404_NOT_FOUND)
+
+    from django.utils import timezone
+
+    if action == 'accept':
+        booking.status = 'confirmed'
+        booking.save()
+
+        # Update attempt
+        attempt = BookingAttempt.objects.filter(booking=booking, provider_id=provider_id).order_by('-sent_at').first()
+        if attempt:
+            attempt.status = 'accepted'
+            attempt.responded_at = timezone.now()
+            attempt.save()
+
+        # Notify customer
+        Notification.objects.create(
+            user=booking.user,
+            title="🎉 Booking Confirmed!",
+            body=f"Great news! {booking.provider.business_name} has accepted your {booking.service_type} booking ({booking.booking_id}). They will be arriving at {booking.location}."
+        )
+
+        AgentLog.objects.create(
+            booking=booking,
+            agent_name="Booking Agent",
+            action_taken=f"{booking.provider.business_name} accepted the booking",
+            reasoning=f"Provider confirmed availability and accepted booking {booking.booking_id}."
+        )
+
+        return Response({
+            'status': 'confirmed',
+            'booking_id': str(booking.id),
+            'message': f'Booking accepted! Customer {booking.user.name} has been notified.'
+        })
+    
+    else:  # decline
+        booking.status = 'cancelled'
+        booking.save()
+
+        # Update attempt
+        attempt = BookingAttempt.objects.filter(booking=booking, provider_id=provider_id).order_by('-sent_at').first()
+        if attempt:
+            attempt.status = 'declined'
+            attempt.responded_at = timezone.now()
+            attempt.failure_reason = 'Provider declined the request'
+            attempt.save()
+
+        # Notify customer
+        Notification.objects.create(
+            user=booking.user,
+            title="Booking Update",
+            body=f"{booking.provider.business_name} was unable to accept your {booking.service_type} booking ({booking.booking_id}). We're looking for alternatives."
+        )
+
+        AgentLog.objects.create(
+            booking=booking,
+            agent_name="Booking Agent",
+            action_taken=f"{booking.provider.business_name} declined the booking",
+            reasoning=f"Provider declined booking {booking.booking_id}. System will attempt to find alternative providers."
+        )
+
+        return Response({
+            'status': 'declined',
+            'booking_id': str(booking.id),
+            'message': 'Booking declined. Customer has been notified.'
+        })
+
+
+@api_view(['GET'])
+def get_provider_stats(request, provider_id):
+    """Get statistics for a provider dashboard."""
+    try:
+        provider = Provider.objects.get(id=provider_id)
+    except Provider.DoesNotExist:
+        return Response({'error': 'Provider not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    total_bookings = Booking.objects.filter(provider=provider).count()
+    confirmed_bookings = Booking.objects.filter(provider=provider, status='confirmed').count()
+    pending_bookings = Booking.objects.filter(provider=provider, status='pending').count()
+
+    return Response({
+        'provider_name': provider.business_name,
+        'category': provider.category,
+        'rating': provider.rating,
+        'review_count': provider.review_count,
+        'is_available': provider.is_available,
+        'total_bookings': total_bookings,
+        'confirmed_bookings': confirmed_bookings,
+        'pending_bookings': pending_bookings,
+    })
+
+
+@api_view(['POST'])
+def toggle_provider_availability(request, provider_id):
+    """Toggle provider's availability status."""
+    try:
+        provider = Provider.objects.get(id=provider_id)
+        provider.is_available = not provider.is_available
+        provider.save()
+        return Response({
+            'is_available': provider.is_available,
+            'message': f"You are now {'available' if provider.is_available else 'offline'}."
+        })
+    except Provider.DoesNotExist:
+        return Response({'error': 'Provider not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+
+# ==================== GOOGLE OAUTH ENDPOINTS ====================
 
 @api_view(['GET'])
 def google_auth_url(request):
@@ -318,4 +534,3 @@ def google_auth_status(request):
 def google_disconnect(request):
     success = disconnect_google()
     return Response({'success': success})
-

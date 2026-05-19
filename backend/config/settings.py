@@ -85,13 +85,24 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 import dj_database_url
 
-DATABASES = {
-    'default': dj_database_url.config(
-        default=os.getenv('DATABASE_URL'),
-        conn_max_age=600,
-        conn_health_checks=True,
-    )
-}
+_database_url = os.getenv('DATABASE_URL', '')
+
+# Use Supabase PostgreSQL if a valid DATABASE_URL is provided, otherwise fall back to local SQLite
+if _database_url and not _database_url.startswith('your_') and 'placeholder' not in _database_url and '[' not in _database_url:
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=_database_url,
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
+    }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation

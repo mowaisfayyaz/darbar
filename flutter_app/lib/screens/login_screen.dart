@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:dio/dio.dart';
+import 'package:provider/provider.dart';
+import '../services/api_service.dart';
+import '../services/theme_provider.dart';
 import 'register_screen.dart';
 import 'main_shell.dart';
 import 'provider_shell.dart';
@@ -11,13 +13,38 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStateMixin {
   final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isProvider = false;
   bool _isLoading = false;
   bool _obscurePassword = true;
   String? _error;
+
+  late AnimationController _animController;
+  late Animation<double> _fadeAnim;
+  late Animation<Offset> _slideAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
+    _fadeAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animController, curve: Curves.easeOut),
+    );
+    _slideAnim = Tween<Offset>(begin: const Offset(0, 0.1), end: Offset.zero).animate(
+      CurvedAnimation(parent: _animController, curve: Curves.easeOut),
+    );
+    _animController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    _identifierController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   Future<void> _login() async {
     if (_identifierController.text.trim().isEmpty || _passwordController.text.isEmpty) {
@@ -27,17 +54,22 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() { _isLoading = true; _error = null; });
 
     try {
-      final dio = Dio();
-      final response = await dio.post(
-        'http://127.0.0.1:8000/api/auth/login/',
-        data: {
-          'identifier': _identifierController.text.trim(),
-          'password': _passwordController.text,
-          'role': _isProvider ? 'provider' : 'customer',
-        },
+      final api = ApiService();
+      final data = await api.login(
+        identifier: _identifierController.text.trim(),
+        password: _passwordController.text,
+        role: _isProvider ? 'provider' : 'customer',
       );
-      final data = response.data;
       if (!mounted) return;
+
+      // Save session
+      final appState = Provider.of<AppStateProvider>(context, listen: false);
+      await appState.saveSession(
+        userId: data['id'],
+        userName: data['name'],
+        userEmail: data['email'],
+        userRole: data['role'],
+      );
 
       if (data['role'] == 'provider') {
         Navigator.pushReplacement(context, MaterialPageRoute(
@@ -48,8 +80,12 @@ class _LoginScreenState extends State<LoginScreen> {
           builder: (_) => MainShell(userId: data['id'], userName: data['name']),
         ));
       }
-    } on DioException catch (e) {
-      setState(() => _error = e.response?.data['error'] ?? 'Login failed. Please try again.');
+    } catch (e) {
+      String msg = 'Login failed. Please check your credentials.';
+      if (e.toString().contains('Connection refused') || e.toString().contains('SocketException')) {
+        msg = 'Cannot connect to server. Please make sure the backend is running.';
+      }
+      setState(() => _error = msg);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -57,86 +93,190 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final appState = Provider.of<AppStateProvider>(context);
+    final isDark = appState.isDarkMode;
+    final primaryColor = const Color(0xFF1565C0);
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: isDark ? const Color(0xFF121212) : Colors.white,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 48),
-              Container(
-                width: 80, height: 80,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1565C0),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Icon(Icons.handyman, color: Colors.white, size: 44),
-              ),
-              const SizedBox(height: 24),
-              Text('Welcome Back', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 6),
-              const Text('Sign in to continue to Darbar', style: TextStyle(color: Colors.grey, fontSize: 16)),
-              const SizedBox(height: 40),
-
-              TextField(
-                controller: _identifierController,
-                decoration: const InputDecoration(labelText: 'Email or Phone Number', prefixIcon: Icon(Icons.person_outline)),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: _passwordController,
-                obscureText: _obscurePassword,
-                decoration: InputDecoration(
-                  labelText: 'Password',
-                  prefixIcon: const Icon(Icons.lock_outline),
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              Row(
+        child: FadeTransition(
+          opacity: _fadeAnim,
+          child: SlideTransition(
+            position: _slideAnim,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Checkbox(value: _isProvider, onChanged: (v) => setState(() => _isProvider = v ?? false)),
-                  const Text('Login as Service Provider'),
+                  const SizedBox(height: 40),
+
+                  // Logo
+                  Center(
+                    child: Container(
+                      width: 80, height: 80,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF0D47A1), Color(0xFF1976D2)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(22),
+                        boxShadow: [
+                          BoxShadow(
+                            color: primaryColor.withOpacity(0.3),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(Icons.handyman, color: Colors.white, size: 42),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+
+                  Text(
+                    'Welcome Back',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Sign in to continue to Darbar',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 15),
+                  ),
+                  const SizedBox(height: 36),
+
+                  // Email / Phone field
+                  TextField(
+                    controller: _identifierController,
+                    style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                    decoration: InputDecoration(
+                      labelText: 'Email or Phone Number',
+                      labelStyle: TextStyle(color: isDark ? Colors.grey[400] : null),
+                      prefixIcon: Icon(Icons.person_outline, color: isDark ? Colors.grey[400] : null),
+                      filled: true,
+                      fillColor: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF5F7FA),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Password field
+                  TextField(
+                    controller: _passwordController,
+                    obscureText: _obscurePassword,
+                    style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      labelStyle: TextStyle(color: isDark ? Colors.grey[400] : null),
+                      prefixIcon: Icon(Icons.lock_outline, color: isDark ? Colors.grey[400] : null),
+                      filled: true,
+                      fillColor: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF5F7FA),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                          color: isDark ? Colors.grey[400] : null,
+                        ),
+                        onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                      ),
+                    ),
+                    onSubmitted: (_) => _login(),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Provider toggle
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: _isProvider,
+                        onChanged: (v) => setState(() => _isProvider = v ?? false),
+                        activeColor: primaryColor,
+                      ),
+                      Text(
+                        'Login as Service Provider',
+                        style: TextStyle(color: isDark ? Colors.grey[300] : Colors.black87),
+                      ),
+                    ],
+                  ),
+
+                  // Error display
+                  if (_error != null) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.red.shade900.withOpacity(0.3) : Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.red.shade300.withOpacity(0.5)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(_error!, style: TextStyle(color: isDark ? Colors.red[300] : Colors.red.shade700, fontSize: 13)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 24),
+
+                  // Sign In button
+                  SizedBox(
+                    height: 52,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryColor,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        elevation: 0,
+                      ),
+                      onPressed: _isLoading ? null : _login,
+                      child: _isLoading
+                          ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                          : const Text('Sign In', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Register link
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        "Don't have an account?",
+                        style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterScreen())),
+                        child: const Text('Create Account', style: TextStyle(color: Color(0xFF1565C0), fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // Dark mode toggle at bottom
+                  Center(
+                    child: TextButton.icon(
+                      onPressed: () => appState.toggleTheme(!isDark),
+                      icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode, size: 18, color: Colors.grey),
+                      label: Text(
+                        isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+                        style: const TextStyle(color: Colors.grey, fontSize: 12),
+                      ),
+                    ),
+                  ),
                 ],
               ),
-
-              if (_error != null) ...[
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.red.shade200)),
-                  child: Text(_error!, style: TextStyle(color: Colors.red.shade700, fontSize: 14)),
-                ),
-              ],
-
-              const SizedBox(height: 20),
-
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
-                onPressed: _isLoading ? null : _login,
-                child: _isLoading
-                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Text('Sign In', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              ),
-              const SizedBox(height: 20),
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text("Don't have an account?"),
-                  TextButton(
-                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterScreen())),
-                    child: const Text('Create Account', style: TextStyle(color: Color(0xFF1565C0), fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              )
-            ],
+            ),
           ),
         ),
       ),
