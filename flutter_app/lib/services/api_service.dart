@@ -164,17 +164,44 @@ class ApiService {
 
   // ==================== GOOGLE OAUTH ====================
 
-  Future<String?> getGoogleAuthUrl() async {
-    final response = await _dio.get('/auth/google/url/');
+  Future<String?> getGoogleAuthUrl({String? userId, String? role}) async {
+    final response = await _dio.get('/auth/google/url/', queryParameters: {
+      if (userId != null) 'user_id': userId,
+      if (role != null) 'role': role,
+    });
     return response.data['url'];
   }
 
-  Future<Map<String, dynamic>> getGoogleAuthStatus() async {
-    final response = await _dio.get('/auth/google/status/');
+  Future<Map<String, dynamic>> getGoogleAuthStatus({String? userId, String? role}) async {
+    final response = await _dio.get('/auth/google/status/', queryParameters: {
+      if (userId != null) 'user_id': userId,
+      if (role != null) 'role': role,
+    });
     return response.data;
   }
 
-  Future<void> disconnectGoogle() async {
-    await _dio.post('/auth/google/disconnect/');
+  Future<void> disconnectGoogle({String? userId, String? role}) async {
+    await _dio.post('/auth/google/disconnect/', data: {
+      if (userId != null) 'user_id': userId,
+      if (role != null) 'role': role,
+    });
+  }
+
+  Future<Map<String, dynamic>> loginWithGoogle({
+    String? idToken,
+    String? accessToken,
+    required String role,
+  }) async {
+    final response = await _dio.post('/auth/google-login/', data: {
+      if (idToken != null) 'id_token': idToken,
+      if (accessToken != null) 'access_token': accessToken,
+      'role': role,
+    });
+    return response.data;
+  }
+
+  Future<String?> getGoogleClientId() async {
+    final response = await _dio.get('/auth/google/config/');
+    return response.data['client_id'];
   }
 }

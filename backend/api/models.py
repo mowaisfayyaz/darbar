@@ -1,4 +1,6 @@
+# pyrefly: ignore [missing-import]
 from django.db import models
+# pyrefly: ignore [missing-import]
 from django.utils import timezone
 import uuid
 
@@ -9,6 +11,8 @@ class User(models.Model):
     phone = models.CharField(max_length=50, unique=True)
     password = models.CharField(max_length=255)
     location = models.CharField(max_length=255, blank=True, null=True)
+    google_email = models.EmailField(blank=True, null=True, unique=True)
+    is_google_linked = models.BooleanField(default=False)
     created_at = models.DateTimeField(default=timezone.now)
 
     def __str__(self):
@@ -33,6 +37,8 @@ class Provider(models.Model):
 
     is_available = models.BooleanField(default=True)
     device_token = models.CharField(max_length=255, blank=True, null=True)
+    google_email = models.EmailField(blank=True, null=True, unique=True)
+    is_google_linked = models.BooleanField(default=False)
     created_at = models.DateTimeField(default=timezone.now)
 
     def __str__(self):

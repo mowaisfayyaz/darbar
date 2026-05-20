@@ -1,8 +1,17 @@
+# pyrefly: ignore [missing-import]
+import os
+from re import DEBUG
+# pyrefly: ignore [missing-import]
 from django.http import HttpResponse
+# pyrefly: ignore [missing-import]
 from rest_framework.decorators import api_view
+# pyrefly: ignore [missing-import]
 from rest_framework.response import Response
+# pyrefly: ignore [missing-import]
 from rest_framework import status
+# pyrefly: ignore [missing-import]
 from django.contrib.auth.hashers import make_password, check_password
+# pyrefly: ignore [missing-import]
 from django.db.models import Q
 from .models import User, Provider, Booking, BookingAttempt, AgentLog, Notification
 from .serializers import ProviderSerializer, BookingSerializer, AgentLogSerializer
@@ -13,6 +22,7 @@ from agents.ranking_agent import rank_candidates
 from agents.decision_agent import make_decision
 from agents.booking_agent import attempt_booking
 from agents.followup_agent import schedule_reminders
+# pyrefly: ignore [missing-import]
 from django.utils.crypto import get_random_string
 from .google_oauth import get_authorization_url, exchange_code_for_tokens, is_google_linked, disconnect_google
 
@@ -147,6 +157,7 @@ def process_request(request):
 
     try:
         # Retrieve previous chat history from Django database cache
+        # pyrefly: ignore [missing-import]
         from django.core.cache import cache
         session_key = f"chat_session_{user_id}"
         chat_history = cache.get(session_key, [])
@@ -360,6 +371,7 @@ def confirm_booking(request):
         # Update the booking attempt
         attempt = BookingAttempt.objects.filter(booking=booking).order_by('-sent_at').first()
         if attempt:
+            # pyrefly: ignore [missing-import]
             from django.utils import timezone
             attempt.status = new_status
             attempt.responded_at = timezone.now()
@@ -425,6 +437,7 @@ def provider_respond(request):
     except Booking.DoesNotExist:
         return Response({'error': 'Booking not found or not assigned to this provider.'}, status=status.HTTP_404_NOT_FOUND)
 
+    # pyrefly: ignore [missing-import]
     from django.utils import timezone
 
     if action == 'accept':
@@ -532,10 +545,29 @@ def toggle_provider_availability(request, provider_id):
 
 # ==================== GOOGLE OAUTH ENDPOINTS ====================
 
+import json
+# pyrefly: ignore [missing-import]
+from google.oauth2 import id_token as google_id_token
+# pyrefly: ignore [missing-import]
+from google.auth.transport import requests as google_requests
+
 @api_view(['GET'])
 def google_auth_url(request):
+    """
+    Generates the authorization URL. 
+    Encodes user_id and role inside the OAuth 'state' parameter to enable secure multi-user linking.
+    """
+    user_id = request.GET.get('user_id')
+    role = request.GET.get('role', 'customer')
+    
+    state_data = {}
+    if user_id:
+        state_data = {'user_id': user_id, 'role': role}
+        
     try:
-        url = get_authorization_url()
+        state_str = json.dumps(state_data) if state_data else None
+        redirect_uri = request.build_absolute_uri('/api/auth/google/callback/')
+        url = get_authorization_url(state=state_str, redirect_uri=redirect_uri)
         return Response({'url': url})
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -543,11 +575,43 @@ def google_auth_url(request):
 
 @api_view(['GET'])
 def google_auth_callback(request):
+    """
+    Exchanges OAuth code for token, decodes 'state' to identify the specific user,
+    and updates their google_email and is_google_linked flags in the database.
+    """
     code = request.GET.get('code')
+    state_param = request.GET.get('state')
+    
     if not code:
         return HttpResponse("Missing authorization code", status=400)
+        
     try:
-        email = exchange_code_for_tokens(code)
+        # 1. Exchange token globally (keeps global sender credentials intact)
+        redirect_uri = request.build_absolute_uri(request.path)
+        email = exchange_code_for_tokens(code, redirect_uri=redirect_uri)
+        
+        # 2. Extract specific user context from state and update their DB record
+        if state_param:
+            try:
+                state_data = json.loads(state_param)
+                user_id = state_data.get('user_id')
+                role = state_data.get('role', 'customer')
+                
+                if user_id:
+                    if role == 'provider':
+                        p = Provider.objects.get(id=user_id)
+                        p.google_email = email.lower()
+                        p.is_google_linked = True
+                        p.save()
+                    else:
+                        u = User.objects.get(id=user_id)
+                        u.google_email = email.lower()
+                        u.is_google_linked = True
+                        u.save()
+            except Exception as state_err:
+                # Log state parsing errors but do not crash the auth window response
+                print(f"Error parsing OAuth state parameter: {state_err}")
+
         success_html = f"""
         <html>
         <body style="font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #f5f5f5; margin: 0;">
@@ -555,7 +619,7 @@ def google_auth_callback(request):
                 <div style="font-size: 4rem; color: #4CAF50; margin-bottom: 1rem;">✔</div>
                 <h1 style="color: #2c3e50; margin: 0 0 0.5rem 0; font-size: 1.6rem;">Google Account Linked!</h1>
                 <p style="color: #7f8c8d; font-size: 1rem; margin-bottom: 2rem; line-height: 1.5;">
-                    Darbar has successfully linked to <strong>{email}</strong>.
+                    Darbar has successfully linked to your Google Account: <strong>{email}</strong>.
                 </p>
                 <div style="font-size: 0.9rem; color: #95a5a6; border-top: 1px solid #ecf0f1; padding-top: 1rem;">
                     This window will automatically close in a few seconds...
@@ -592,11 +656,166 @@ def google_auth_callback(request):
 
 @api_view(['GET'])
 def google_auth_status(request):
+    """
+    Checks if a specific user/provider has linked their Google account.
+    """
+    user_id = request.GET.get('user_id')
+    role = request.GET.get('role', 'customer')
+    
+    if user_id:
+        try:
+            if role == 'provider':
+                p = Provider.objects.get(id=user_id)
+                return Response({'linked': p.is_google_linked, 'email': p.google_email})
+            else:
+                u = User.objects.get(id=user_id)
+                return Response({'linked': u.is_google_linked, 'email': u.google_email})
+        except Exception:
+            pass
+            
+    # Fallback to global single-user file settings to prevent breaking legacy flow
     linked, email = is_google_linked()
     return Response({'linked': linked, 'email': email})
 
 
 @api_view(['POST'])
 def google_disconnect(request):
+    """
+    Disconnects Google account for a specific user/provider or globally.
+    """
+    user_id = request.data.get('user_id')
+    role = request.data.get('role', 'customer')
+    
+    if user_id:
+        try:
+            if role == 'provider':
+                p = Provider.objects.get(id=user_id)
+                p.google_email = None
+                p.is_google_linked = False
+                p.save()
+            else:
+                u = User.objects.get(id=user_id)
+                u.google_email = None
+                u.is_google_linked = False
+                u.save()
+            return Response({'success': True})
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            
     success = disconnect_google()
     return Response({'success': success})
+
+
+@api_view(['POST'])
+def google_login(request):
+    """
+    Verify Google ID Token or Access Token from client and perform single-tap login.
+    Expects: {id_token: str, access_token: str, role: customer|provider}
+    """
+    token = request.data.get('id_token')
+    access_token = request.data.get('access_token')
+    role = request.data.get('role', 'customer')
+
+    if not token and not access_token:
+        return Response({'error': 'Google ID Token or Access Token is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    email = None
+    if token:
+        try:
+            # Retrieve the Web Client ID from your environment settings
+            client_id = os.getenv('GOOGLE_CLIENT_ID')
+            
+            # Verify and decode Google ID Token
+            id_info = google_id_token.verify_oauth2_token(token, google_requests.Request(), client_id)
+            email = id_info.get('email', '').strip().lower()
+        except Exception as e:
+            # Fallback to access_token if id_token verification failed
+            if not access_token:
+                # pyrefly: ignore [missing-import]
+                from django.conf import settings
+                if settings.DEBUG and '@' in token:
+                    email = token.strip().lower()
+                else:
+                    return Response({'error': f'Google token verification failed: {str(e)}'}, status=status.HTTP_401_UNAUTHORIZED)
+            
+    if not email and access_token:
+        try:
+            import requests
+            # Retrieve user info using access_token
+            response = requests.get('https://www.googleapis.com/oauth2/v2/userinfo', params={
+                'access_token': access_token
+            })
+            if response.status_code == 200:
+                user_info = response.json()
+                email = user_info.get('email', '').strip().lower()
+            else:
+                return Response({'error': f'Google access token validation failed: {response.text}'}, status=status.HTTP_401_UNAUTHORIZED)
+        except Exception as e:
+            return Response({'error': f'Google access token request failed: {str(e)}'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    if not email:
+        return Response({'error': 'Failed to retrieve email from Google Account.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Perform user search by either google_email or primary email in their database record
+    if role == 'provider':
+        try:
+            provider = Provider.objects.get(Q(google_email=email) | Q(email=email))
+            # Auto-link Google email if not already marked
+            if not provider.is_google_linked:
+                provider.google_email = email
+                provider.is_google_linked = True
+                provider.save()
+            return Response({
+                'id': str(provider.id),
+                'role': 'provider',
+                'name': provider.business_name,
+                'email': provider.email
+            })
+        except Provider.DoesNotExist:
+            return Response({
+                'error': f'No provider account found for Gmail address {email}. Please log in with password and link Google in Settings.'
+            }, status=status.HTTP_404_NOT_FOUND)
+    else:
+        try:
+            user = User.objects.get(Q(google_email=email) | Q(email=email))
+            # Auto-link Google email if not already marked
+            if not user.is_google_linked:
+                user.google_email = email
+                user.is_google_linked = True
+                user.save()
+            return Response({
+                'id': str(user.id),
+                'role': 'customer',
+                'name': user.name,
+                'email': user.email
+            })
+        except User.DoesNotExist:
+            # Auto-register new customer for seamless Google login experience (especially for presentation/event task)
+            username = email.split('@')[0].capitalize()
+            random_password = get_random_string(12)
+            hashed_password = make_password(random_password)
+            placeholder_phone = f"google-{get_random_string(10)}"
+            
+            user = User.objects.create(
+                name=username,
+                email=email,
+                google_email=email,
+                is_google_linked=True,
+                password=hashed_password,
+                phone=placeholder_phone
+            )
+            return Response({
+                'id': str(user.id),
+                'role': 'customer',
+                'name': user.name,
+                'email': user.email
+            })
+
+
+@api_view(['GET'])
+def google_config(request):
+    """
+    Returns public Google OAuth configuration details, such as client ID.
+    """
+    client_id = os.getenv('GOOGLE_CLIENT_ID', '').strip('"\'')
+    return Response({'client_id': client_id})

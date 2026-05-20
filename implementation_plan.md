@@ -305,3 +305,78 @@ cd flutter_app && flutter analyze
 | Phase 4 | UI polish | ~2 hours |
 | Phase 5 | Documentation | ~30 min |
 | **Total** | | **~8 hours** |
+
+
+OAuth :
+
+# Updated Implementation Plan: Multi-User Google Authentication
+
+Based on your excellent feedback, we are adapting the plan to align perfectly with your design requirements and to upgrade your friend's existing code to support **individual multi-user sign-ins**.
+
+---
+
+## Technical Insights & Answers to your Questions
+
+### 1. Codebase Audit: Is Google OAuth already there?
+**Yes, it is!** 
+* **Backend (`google_oauth.py`)**: Contains the Google Flow, token exchange, and Gmail API dispatch handler.
+* **Frontend (`settings_screen.dart`)**: Contains a "Connect Google Account" button that triggers the OAuth browser link.
+* **Current Limitation**: Currently, this is configured for a *single global demo account* (it saves all tokens to a single local file `google_tokens.json`). We will upgrade this so that **each individual user and provider** has their own Google connection stored directly in the database.
+
+### 2. How do we know if a Google sign-in is a Provider or a Customer?
+Your design idea is spot on! Since the **Login Screen** already has a `"Login as Service Provider"` checkbox, we will keep that toggle!
+* Before clicking the "Sign In with Google" button, the user will check or uncheck that box.
+* The Flutter app will send the verified Google email + the selected role (Customer or Provider) to the backend.
+* The backend will search the appropriate database table (`User` or `Provider`) to find a match.
+
+### 3. Login Credentials Flow (How do they log back in?)
+When they log out, they have two seamless choices to log back in:
+1. **Password Login**: They can enter their email/phone and their original password (which they created during registration).
+2. **Google Single-Tap Login**: Since their Google account was linked in their profile, they can simply tap the "Sign in with Google" button on the login screen. It will look up their linked email and log them in instantly—**no password typing required!**
+
+---
+
+## Proposed Architectural Upgrades
+
+### Step 1: Upgrade the Database Models
+We will add `google_email` and `is_google_linked` fields to the `User` and `Provider` models so each account tracks its own Google authorization state.
+
+#### [MODIFY] [models.py](file:///e:/flutter/flutter-projects/darbar-Hassan/backend/api/models.py)
+```python
+# Add to User model
+google_email = models.EmailField(blank=True, null=True, unique=True)
+is_google_linked = models.BooleanField(default=False)
+
+# Add to Provider model
+google_email = models.EmailField(blank=True, null=True, unique=True)
+is_google_linked = models.BooleanField(default=False)
+```
+
+### Step 2: Use OAuth `state` for Secure Account Linking
+When a logged-in user taps **"Connect Google Account"** in their profile, we will pass their specific `user_id` and `role` inside the OAuth `state` parameter.
+When Google redirects back to our backend callback, the backend reads the `state` and links the Google email to that specific user in the database.
+
+#### [MODIFY] [views.py](file:///e:/flutter/flutter-projects/darbar-Hassan/backend/api/views.py)
+We will add the backend endpoints for:
+1. **State-aware Google Auth URL Generation**: Encodes the active `user_id` and `role` into the state.
+2. **Multi-User Google Callback**: Decodes the state and saves the user's specific access/refresh tokens in their database record instead of a global file.
+3. **Google Sign-In Verification**: Verifies Google ID tokens sent from the Flutter login page and logs them in.
+
+---
+
+## Step-by-Step Implementation Steps
+
+### Phase 1: Backend Database & Route Upgrades
+1. Apply migrations to add `google_email` and `is_google_linked` fields.
+2. Update `/api/auth/google/url/` to accept `user_id` and `role` query parameters.
+3. Update `/api/auth/google/callback/` to decode the state and save tokens to the user/provider record in the database.
+4. Implement `/api/auth/google-login/` to verify Google ID tokens for single-tap login.
+
+### Phase 2: Flutter Settings Screen Upgrade
+1. Update the **Connect Google Account** call in `settings_screen.dart` to pass the logged-in user's ID and role:
+   `http://127.0.0.1:8000/api/auth/google/url/?user_id=$userId&role=$role`
+2. Update the status card to show their linked personal Gmail.
+
+### Phase 3: Flutter Login Screen Upgrade
+1. Add a sleek, modern **"Sign In with Google"** button below the standard login button.
+2. Wire it up to trigger the native `google_sign_in` sheet, fetch the token, and send it to the backend along with the selected role checkbox state.

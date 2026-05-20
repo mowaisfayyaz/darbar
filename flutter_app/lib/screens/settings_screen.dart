@@ -33,7 +33,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _checkGoogleStatus() async {
     setState(() => _loadingGoogle = true);
     try {
-      final data = await _api.getGoogleAuthStatus();
+      final role = widget.isProviderTheme ? 'provider' : 'customer';
+      final data = await _api.getGoogleAuthStatus(userId: widget.userId, role: role);
       setState(() {
         _googleLinked = data['linked'] ?? false;
         _googleEmail = data['email'];
@@ -46,7 +47,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _connectGoogle() async {
     try {
-      final url = await _api.getGoogleAuthUrl();
+      final role = widget.isProviderTheme ? 'provider' : 'customer';
+      final url = await _api.getGoogleAuthUrl(userId: widget.userId, role: role);
       if (url != null) {
         final uri = Uri.parse(url);
         await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -95,7 +97,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() => _loadingGoogle = true);
     try {
-      await _api.disconnectGoogle();
+      final role = widget.isProviderTheme ? 'provider' : 'customer';
+      await _api.disconnectGoogle(userId: widget.userId, role: role);
       setState(() {
         _googleLinked = false;
         _googleEmail = null;

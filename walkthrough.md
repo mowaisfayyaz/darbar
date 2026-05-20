@@ -86,3 +86,209 @@ Flutter analyze: 0 errors, 0 warnings
 - Set up Google OAuth credentials for live Gmail dispatch
 - Deploy backend to Render for a public demo URL
 - Add a few more Lottie animations to the processing screen
+
+OAuth walkthrough:
+# Darbar Project — Google OAuth Integration Walkthrough
+
+## Project Overview
+
+**Darbar** is an AI-powered service marketplace app built with a **Flutter** frontend and a **Django REST Framework** backend, backed by **Supabase (PostgreSQL)**. It connects customers with local service providers (plumbers, electricians, tutors, etc.) in Pakistani cities. The app features an intelligent multi-agent booking system powered by AI (Gemini/MiniMax/Groq).
+
+### Tech Stack
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Flutter (Dart) — running on Web/Android/iOS |
+| Backend | Django 5.0.4 + Django REST Framework |
+| Database | Supabase PostgreSQL (with SQLite fallback) |
+| AI Engine | Multi-tier: MiniMax → Gemini → Groq (fallback chain) |
+| Auth | Custom email/phone + password + **Google OAuth 2.0** (new) |
+
+---
+
+## Session Objective
+
+Integrate **Google Sign-In (OAuth 2.0)** into the Darbar app so that both **customers** and **service providers** can link their Google accounts and use single-tap sign-in.
+
+---
+
+## What We Accomplished
+
+### Phase 1: Backend Setup & Debugging (Earlier in Session)
+
+1. **Installed Python dependencies** from `requirements.txt` inside a virtual environment (`.venv`).
+2. **Activated the virtual environment** and resolved PowerShell module loading issues.
+3. **Ran Django migrations** (`makemigrations` + `migrate`) to initialize the database schema.
+4. **Debugged registration failures** — enhanced both `register_screen.dart` and `login_screen.dart` to extract and display actual server error messages from `DioException` responses instead of generic "failed" banners.
+5. **Verified the backend server** was running correctly at `http://0.0.0.0:8000/`.
+
+---
+
+### Phase 2: Google OAuth Integration (Main Task)
+
+#### Design Decisions
+
+The user specified these critical requirements:
+
+> [!IMPORTANT]
+> 1. **No Google button on Registration page** — Users must first register with email/phone + password so we know their role (customer vs provider).
+> 2. **Google linking happens in Settings** — After registration, users can link their Google account from their profile/settings page.
+> 3. **Google Sign-In on Login page** — Once linked, users can use "Sign In with Google" on the login page. The existing "Login as Service Provider" checkbox determines the role.
+> 4. **Never open `.env` file** — Only reference `.env.example`; user handles credentials manually.
+
+#### Codebase Audit
+
+We discovered that the user's friend had already written foundational OAuth code:
+
+| File | What Existed |
+|------|-------------|
+| [google_oauth.py](file:///e:/flutter/flutter-projects/darbar-Hassan/backend/api/google_oauth.py) | Google OAuth Flow, token exchange, Gmail API sender |
+| [settings_screen.dart](file:///e:/flutter/flutter-projects/darbar-Hassan/flutter_app/lib/screens/settings_screen.dart) | "Connect Google Account" button with status check |
+
+**Limitation found:** The existing code only supported a single global token file (`google_tokens.json`). We upgraded it to support **per-user Google linking** stored in the database.
+
+---
+
+### Files Modified
+
+#### Backend Changes
+
+##### [models.py](file:///e:/flutter/flutter-projects/darbar-Hassan/backend/api/models.py)
+Added two new fields to both `User` and `Provider` models:
+```python
+google_email = models.EmailField(blank=True, null=True, unique=True)
+is_google_linked = models.BooleanField(default=False)
+```
+
+##### [google_oauth.py](file:///e:/flutter/flutter-projects/darbar-Hassan/backend/api/google_oauth.py)
+Updated `get_authorization_url()` to accept an optional `state` parameter for encoding user identity during OAuth redirects.
+
+##### [views.py](file:///e:/flutter/flutter-projects/darbar-Hassan/backend/api/views.py)
+Major upgrades to all Google OAuth endpoints:
+
+| Endpoint | What Changed |
+|----------|-------------|
+| `GET /api/auth/google/url/` | Now accepts `user_id` and `role` query params, encodes them in OAuth `state` |
+| `GET /api/auth/google/callback/` | Decodes `state` to identify which user linked their account, saves `google_email` to their DB record |
+| `GET /api/auth/google/status/` | Now checks per-user link status from DB (with global fallback) |
+| `POST /api/auth/google/disconnect/` | Now disconnects per-user (clears `google_email` and `is_google_linked`) |
+| `POST /api/auth/google-login/` | **NEW** — Verifies Google ID tokens and performs single-tap login |
+
+##### [urls.py](file:///e:/flutter/flutter-projects/darbar-Hassan/backend/api/urls.py)
+Added new route:
+```python
+path('auth/google-login/', views.google_login, name='google_login'),
+```
+
+##### Database Migration
+```
+api/migrations/0003_provider_google_email_provider_is_google_linked_and_more.py
+```
+Successfully applied to add the 4 new columns.
+
+---
+
+#### Flutter Changes
+
+##### [pubspec.yaml](file:///e:/flutter/flutter-projects/darbar-Hassan/flutter_app/pubspec.yaml)
+Added dependency:
+```yaml
+google_sign_in: ^6.2.1
+```
+
+##### [api_service.dart](file:///e:/flutter/flutter-projects/darbar-Hassan/flutter_app/lib/services/api_service.dart)
+- Updated `getGoogleAuthUrl()`, `getGoogleAuthStatus()`, and `disconnectGoogle()` to accept optional `userId` and `role` parameters.
+- Added new method:
+```dart
+Future<Map<String, dynamic>> loginWithGoogle({
+  required String idToken,
+  required String role,
+}) async { ... }
+```
+
+##### [settings_screen.dart](file:///e:/flutter/flutter-projects/darbar-Hassan/flutter_app/lib/screens/settings_screen.dart)
+Updated all three Google OAuth methods (`_checkGoogleStatus`, `_connectGoogle`, `_disconnectGoogle`) to pass the logged-in user's `widget.userId` and role to the API, enabling per-user Google linking.
+
+##### [login_screen.dart](file:///e:/flutter/flutter-projects/darbar-Hassan/flutter_app/lib/screens/login_screen.dart)
+- Added `google_sign_in` import and `_api` field.
+- Implemented `_loginWithGoogle()` method that:
+  1. Triggers native Google Sign-In sheet
+  2. Retrieves the ID token
+  3. Sends it to `/api/auth/google-login/` with the role from the checkbox
+  4. Saves the session and navigates to the correct dashboard
+- Added a styled **"Sign In with Google"** button below the standard Sign In button.
+- Fixed `saveSession()` calls to use named parameters matching `AppStateProvider`.
+
+---
+
+## Verification Results
+
+```
+flutter analyze → Exit code: 0
+  ✅ 0 errors
+  ✅ 0 warnings (only info-level deprecation hints)
+  
+Django migrations → Successfully applied
+Django server → Running at http://0.0.0.0:8000/
+```
+
+---
+
+## Remaining User Action: Google Cloud Console Setup
+
+### Step-by-Step Credential Setup
+
+1. **Go to** [Google Cloud Console](https://console.cloud.google.com/)
+2. **Create/select** your Darbar project
+3. **Configure OAuth Consent Screen** → External → Fill app name "Darbar"
+4. **Create OAuth Client ID:**
+   - Type: **Web Application**
+   - Authorized JavaScript Origin: `http://localhost:8080` and `http://127.0.0.1:8080` (for Flutter Web runner)
+   - Authorized Redirect URI: `http://127.0.0.1:8000/api/auth/google/callback/` and `http://localhost:8000/api/auth/google/callback/`
+5. **Copy** the Client ID and Client Secret
+6. **Paste** into `backend/.env`:
+   ```env
+   GOOGLE_CLIENT_ID="xxxxx.apps.googleusercontent.com"
+   GOOGLE_CLIENT_SECRET="xxxxx"
+   GOOGLE_REDIRECT_URI="http://127.0.0.1:8000/api/auth/google/callback/"
+   ```
+7. **Restart** the Django server.
+8. **Run the Flutter App** on port `8080` to match the whitelisted JavaScript Origin:
+   ```bash
+   flutter run -d chrome --web-port=8080
+   ```
+
+---
+
+## Architecture Diagram
+
+```mermaid
+sequenceDiagram
+    participant U as User/Provider
+    participant F as Flutter App
+    participant D as Django Backend
+    participant G as Google OAuth
+
+    Note over U,G: Flow 1: Account Linking (Settings Page)
+    U->>F: Tap "Connect Google Account"
+    F->>D: GET /api/auth/google/url/?user_id=X&role=Y
+    D->>F: Returns Google OAuth URL (with state)
+    F->>G: Opens browser to Google consent screen
+    G->>D: Redirects to /callback/ with code + state
+    D->>D: Exchange code → get email → update User/Provider DB record
+    D->>U: Shows "Account Linked!" success page
+
+    Note over U,G: Flow 2: Google Sign-In (Login Page)
+    U->>F: Tap "Sign In with Google"
+    F->>G: Native Google Sign-In sheet (forces Account Chooser)
+    G->>F: Returns ID Token (or Access Token on Web)
+    F->>D: POST /api/auth/google-login/ {id_token, access_token, role}
+    D->>D: Verify Token (or call UserInfo API if access_token)
+    alt User exists
+        D->>D: Authenticate and log user in
+    else User does not exist (Customer Auto-Registration)
+        D->>D: Automatically create a new Customer profile
+    end
+    D->>F: Returns {id, role, name, email}
+    F->>U: Navigate to Dashboard
+```
+

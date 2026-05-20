@@ -1,3 +1,4 @@
+# pyrefly: ignore [missing-import]
 from django.urls import path
 from . import views
 
@@ -36,4 +37,6 @@ urlpatterns = [
     path('auth/google/callback/', views.google_auth_callback, name='google_auth_callback'),
     path('auth/google/status/', views.google_auth_status, name='google_auth_status'),
     path('auth/google/disconnect/', views.google_disconnect, name='google_disconnect'),
+    path('auth/google-login/', views.google_login, name='google_login'),
+    path('auth/google/config/', views.google_config, name='google_config'),
 ]
