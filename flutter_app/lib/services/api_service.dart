@@ -68,6 +68,22 @@ class ApiService {
     return response.data;
   }
 
+  Future<Map<String, dynamic>> selectProvider({
+    required String userId,
+    required String providerId,
+    required String serviceType,
+    required String location,
+  }) async {
+    final response = await _dio.post('/request/select/', data: {
+      'user_id': userId,
+      'provider_id': providerId,
+      'service_type': serviceType,
+      'location': location,
+    });
+    return response.data;
+  }
+
+
   // ==================== BOOKINGS ====================
 
   Future<Map<String, dynamic>> getBooking(String bookingId) async {

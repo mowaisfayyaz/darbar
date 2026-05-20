@@ -28,7 +28,20 @@ This document summarizes the final round of production updates, environment stab
 * **Zero-Coverage Cancellation**:
   * If a user requests a service in a location we do not cover (e.g. `"Mianwali"` or `"Sibbi"`), the agent immediately returns an empty list (`[]`) and fails the booking with a "No service partners found" status message rather than matching a provider from another city.
 
+
+### 4. Database-Backed Session Memory (No-Redis Context Cache)
+* **Goal**: Enable the AI chatbot agent to remember previous turns of the conversation (e.g. if the user says *"I need a plumber"* and then follows up with *"in G-13"*, it should remember *"plumber"*).
+* **Django DB Cache Backend Configured**: Added a `CACHES` configuration to [settings.py](file:///d:/DarBar/darbar/backend/config/settings.py#L106-L113) utilizing Django's database cache backend (`darbar_cache_table`). Created the table directly in Supabase using `createcachetable`.
+* **Stateful Chat Flow**:
+  * In [views.py](file:///d:/DarBar/darbar/backend/api/views.py#L147-L163), retrieved previous chat history from the Supabase cache using `chat_session_{user_id}` and fed it directly into the Intent Agent.
+  * In [intent_agent.py](file:///d:/DarBar/darbar/backend/agents/intent_agent.py#L17-L46), updated the LLM prompt and the fallback parser to consume the history logs and resolve context attributes dynamically.
+  * Once the booking intent resolves fully (`needs_clarification = False`), the session cache is automatically cleared to prevent context carry-over to future bookings.
+* **Resiliency & Lifecycle Notes**:
+  * **Server-Restart Immune**: Because history is saved in the remote Supabase table `darbar_cache_table`, the AI's conversation memory survives backend restarts, crashes, or server sleeping cycles.
+  * **Frontend UI State**: The visual chat bubbles on the mobile screen are managed in the Flutter client's temporary RAM state. Reopening the app clears the visual bubbles, but the backend AI will still remember the context of the unresolved session because the cache persists in the database.
+
 ---
+
 
 ## 📊 Database Status (Supabase)
 

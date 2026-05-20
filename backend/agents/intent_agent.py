@@ -3,7 +3,7 @@ import requests
 import json
 from api.models import AgentLog
 
-def extract_intent(user_input: str, booking_id=None):
+def extract_intent(user_input: str, history: list = None, booking_id=None):
     """
     Core Intent Agent for Darbar.
     Processes user queries using a resilient cascading three-tier LLM chain:
@@ -17,6 +17,15 @@ def extract_intent(user_input: str, booking_id=None):
     """
     agent_name = "Intent Agent"
     action_taken = "Analyzing query and extracting intent"
+
+    history_str = ""
+    if history:
+        history_str = "Previous turns in this conversation for context:\n"
+        for msg in history:
+            role = msg.get('role', 'user')
+            content = msg.get('content', '')
+            history_str += f"- {role.capitalize()}: {content}\n"
+        history_str += "\nUse the above history to resolve missing details. For example, if the user previously specified they need an 'AC Technician' and now they just say 'G-13', you should output service_type='AC Technician' and location='G-13'.\n\n"
 
     prompt = f"""
     You are the core Intent Agent of Darbar. Your job is to extract search intent from user queries to find service providers, OR handle greetings and service descriptions directly.
@@ -46,6 +55,7 @@ def extract_intent(user_input: str, booking_id=None):
       "reply_message": "..."
     }}
     
+    {history_str}
     User Input: "{user_input}"
     """
 
@@ -181,6 +191,34 @@ def extract_intent(user_input: str, booking_id=None):
         # 3. Dynamic query parsing
         else:
             service = None
+            location = None
+            time_pref = None
+            
+            # Seed fields from previous turns if available
+            if history:
+                for msg in history:
+                    content_lower = msg.get('content', '').lower()
+                    if not service:
+                        if "ac" in content_lower:
+                            service = "AC Technician"
+                        elif "plumb" in content_lower:
+                            service = "Plumber"
+                        elif "electr" in content_lower:
+                            service = "Electrician"
+                    if not location:
+                        if "g-13" in content_lower:
+                            location = "G-13"
+                        elif "e-11" in content_lower:
+                            location = "E-11"
+                        elif "f-6" in content_lower:
+                            location = "F-6"
+                    if not time_pref:
+                        if "tomorrow" in content_lower or "kal" in content_lower:
+                            time_pref = "Tomorrow"
+                        elif "now" in content_lower or "asap" in content_lower or "abhi" in content_lower:
+                            time_pref = "As soon as possible"
+            
+            # Overlay current user input values
             if "ac" in text_lower:
                 service = "AC Technician"
             elif "plumb" in text_lower:
@@ -188,7 +226,6 @@ def extract_intent(user_input: str, booking_id=None):
             elif "electr" in text_lower:
                 service = "Electrician"
                 
-            location = None
             if "g-13" in text_lower:
                 location = "G-13"
             elif "e-11" in text_lower:
@@ -196,7 +233,6 @@ def extract_intent(user_input: str, booking_id=None):
             elif "f-6" in text_lower:
                 location = "F-6"
                 
-            time_pref = None
             if "tomorrow" in text_lower or "kal" in text_lower:
                 time_pref = "Tomorrow"
             elif "now" in text_lower or "asap" in text_lower or "abhi" in text_lower:

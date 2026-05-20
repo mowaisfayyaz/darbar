@@ -146,11 +146,21 @@ def process_request(request):
         return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
 
     try:
-        # Step 1: Extract intent (no booking created yet)
-        intent_data = extract_intent(raw_text)
+        # Retrieve previous chat history from Django database cache
+        from django.core.cache import cache
+        session_key = f"chat_session_{user_id}"
+        chat_history = cache.get(session_key, [])
+
+        # Step 1: Extract intent (no booking created yet, passing conversation history context)
+        intent_data = extract_intent(raw_text, history=chat_history)
         
         # If the intent needs clarification, respond without creating a booking
         if intent_data.get('needs_clarification', False):
+            # Save user query and agent response to conversation cache
+            chat_history.append({"role": "user", "content": raw_text})
+            chat_history.append({"role": "assistant", "content": intent_data.get('reply_message', '')})
+            cache.set(session_key, chat_history[-10:], timeout=600)  # Expires in 10 minutes
+
             return Response({
                 "status": "clarification",
                 "message": intent_data.get('reply_message', 'Please provide service type, location, and time details.'),
@@ -162,51 +172,106 @@ def process_request(request):
                 }
             }, status=status.HTTP_200_OK)
 
-        # Step 2: Intent is complete — NOW create the booking
+        # Clear session cache since booking intent is fully complete
+        cache.delete(session_key)
+
+        # Step 2: Discover providers
+        candidates = discover_providers(intent_data)
+        
+        # Step 3: Rank candidates
+        ranked_candidates = rank_candidates(candidates, target_location=intent_data.get('location', 'Unknown'))
+
+        if not ranked_candidates:
+            return Response({
+                "status": "failed", 
+                "reason": f"Sorry, no available {intent_data.get('service_type', 'service partners')} were found in {intent_data.get('location', 'your area')}."
+            })
+
+        # Step 4: Serialize the top 3 candidates
+        serialized_providers = []
+        for cand in ranked_candidates[:3]:
+            serialized_providers.append({
+                "id": str(cand['id']),
+                "business_name": cand['business_name'],
+                "phone": cand['phone'],
+                "rating": float(cand['rating']),
+                "review_count": int(cand['review_count']),
+                "area": cand['area'],
+                "city": cand['city'],
+                "category": cand['category'],
+                "score": cand.get('total_score', 0.0),
+                "distance": cand.get('distance_km'),
+            })
+
+        # Step 5: Return selection options
+        lang = intent_data.get('language_detected', 'en')
+        if lang == 'ur':
+            message = f"مجھے آپ کی ضرورت کے مطابق {len(serialized_providers)} بہترین سروس پارٹنرز ملے ہیں۔ براہ کرم بک کرنے کے لیے ایک کا انتخاب کریں:"
+        elif lang == 'ur-roman':
+            message = f"Mujhe aapki requirement k mutabiq {len(serialized_providers)} best service partners mile hain. Plz book krne k liye ek select krein:"
+        else:
+            message = f"I found the top {len(serialized_providers)} service partners matching your request. Please select one to book:"
+
+        return Response({
+            "status": "selection",
+            "message": message,
+            "service_type": intent_data.get('service_type', 'Unknown'),
+            "location": intent_data.get('location', 'Unknown'),
+            "providers": serialized_providers
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        # Log system errors
+        AgentLog.objects.create(
+            agent_name="System",
+            action_taken="Error processing request",
+            reasoning=str(e)
+        )
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+def select_provider(request):
+    """
+    Client selection confirmation endpoint.
+    Expects: {"user_id": "uuid", "provider_id": "uuid", "service_type": "Plumber", "location": "G-13"}
+    """
+    user_id = request.data.get('user_id')
+    provider_id = request.data.get('provider_id')
+    service_type = request.data.get('service_type', 'Unknown')
+    location = request.data.get('location', 'Unknown')
+
+    if not user_id or not provider_id:
+        return Response({"error": "user_id and provider_id are required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user = User.objects.get(id=user_id)
+        provider = Provider.objects.get(id=provider_id)
+    except (User.DoesNotExist, Provider.DoesNotExist):
+        return Response({"error": "User or Provider not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        # Create the booking
         booking_id_human = f"BK-2026-{get_random_string(6).upper()}"
         booking = Booking.objects.create(
             booking_id=booking_id_human,
             user=user,
-            service_type=intent_data.get('service_type', 'Unknown'),
-            location=intent_data.get('location', 'Unknown')
+            provider=provider,
+            service_type=service_type,
+            location=location,
+            status='pending'
         )
 
-        # Log the intent extraction with the booking
+        # Log the selection
         AgentLog.objects.create(
             booking=booking,
-            agent_name="Intent Agent",
-            action_taken="Extracted search intent from user query",
-            reasoning=f"Service: {intent_data.get('service_type')}, Location: {intent_data.get('location')}, Time: {intent_data.get('time_preference')}, Language: {intent_data.get('language_detected')}. Special: {intent_data.get('special_requirements', 'None')}"
+            agent_name="Decision Agent",
+            action_taken="Client selected provider from top matches",
+            reasoning=f"User selected provider '{provider.business_name}' for {service_type} at {location}."
         )
 
-        # Step 3: Discover providers
-        candidates = discover_providers(intent_data, booking_id=booking.id)
-        
-        # Step 4: Rank candidates
-        ranked_candidates = rank_candidates(candidates, target_location=booking.location, booking_id=booking.id)
-
-        # Step 5: Make decision
-        language = intent_data.get('language_detected', 'en')
-        selected_provider_data, reasoning = make_decision(ranked_candidates, booking_id=booking.id, language=language)
-
-        if not selected_provider_data:
-            booking.status = 'cancelled'
-            booking.save()
-            return Response({
-                "status": "failed", 
-                "reason": reasoning, 
-                "booking_id": str(booking.id),
-                "human_booking_id": booking.booking_id
-            })
-
-        # Step 6: Book with the selected provider
-        provider = Provider.objects.get(id=selected_provider_data['id'])
-        booking.provider = provider
-        booking.save()
-
+        # Attempt booking notifications/timers
         attempt = attempt_booking(booking_obj=booking, provider_obj=provider)
-        
-        # Step 7: Schedule follow-up reminders
         schedule_reminders(booking)
 
         # Create notifications for both user and provider
@@ -221,6 +286,8 @@ def process_request(request):
             body=f"New {booking.service_type} request from {user.name} at {booking.location}. Booking ID: {booking.booking_id}."
         )
 
+        # Return standard processing payload to redirect Flutter app to processing animation screen
+        reasoning = f"Selected {provider.business_name} matching user selection. Provider rating {provider.rating}/5."
         return Response({
             "status": "processing",
             "booking_id": str(booking.id),
@@ -235,15 +302,14 @@ def process_request(request):
             "provider_reviews": provider.review_count,
             "provider_category": provider.category,
         })
-
     except Exception as e:
-        # Log system errors
         AgentLog.objects.create(
             agent_name="System",
-            action_taken="Error processing request",
+            action_taken="Error creating selected booking",
             reasoning=str(e)
         )
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 @api_view(['GET'])

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:convert';
 import '../services/api_service.dart';
 import '../services/theme_provider.dart';
 import 'processing_screen.dart';
+
 
 class HomeScreen extends StatefulWidget {
   final String? userId;
@@ -63,6 +65,21 @@ class _HomeScreenState extends State<HomeScreen> {
           _messages.add({'role': 'agent', 'text': data['message'], 'time': agentTimeStr});
         });
         _scrollToBottom();
+      } else if (data['status'] == 'selection') {
+        final agentTime = TimeOfDay.now();
+        final agentTimeStr = '${agentTime.hourOfPeriod == 0 ? 12 : agentTime.hourOfPeriod}:${agentTime.minute.toString().padLeft(2, '0')} ${agentTime.period == DayPeriod.am ? 'AM' : 'PM'}';
+        setState(() {
+          _messages.add({
+            'role': 'agent',
+            'text': data['message'],
+            'status': 'selection',
+            'service_type': data['service_type'] ?? '',
+            'location': data['location'] ?? '',
+            'providers_json': jsonEncode(data['providers']),
+            'time': agentTimeStr
+          });
+        });
+        _scrollToBottom();
       } else if (data['status'] == 'processing') {
         setState(() {
           _messages.add({
@@ -119,6 +136,63 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
   }
+
+  void _selectProvider(String providerId, String serviceType, String location) async {
+    setState(() {
+      _isTyping = true;
+    });
+
+    try {
+      final data = await _api.selectProvider(
+        userId: widget.userId ?? '',
+        providerId: providerId,
+        serviceType: serviceType,
+        location: location,
+      );
+
+      if (!mounted) return;
+
+      setState(() => _isTyping = false);
+
+      if (data['status'] == 'processing') {
+        _pendingService = null;
+        _pendingLocation = null;
+        _pendingTime = null;
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ProcessingScreen(
+              bookingData: {
+                'booking_id': data['booking_id'],
+                'human_booking_id': data['human_booking_id'],
+                'provider_name': data['provider_name'],
+                'provider_rating': data['provider_rating'],
+                'provider_phone': data['provider_phone'],
+                'provider_area': data['provider_area'],
+                'provider_reviews': data['provider_reviews'],
+                'service_type': data['service_type'],
+                'location': data['location'],
+                'message': data['message'],
+              },
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(data['error'] ?? 'Could not complete selection.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isTyping = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('⚠️ Connection error. Please try again.')),
+        );
+      }
+    }
+  }
+
 
   void _scrollToBottom() {
     Future.delayed(const Duration(milliseconds: 100), () {
@@ -324,6 +398,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 height: 1.4,
               ),
             ),
+            if (!isUser && msg['status'] == 'selection') ...[
+              _buildProviderSelectionList(msg, isDark),
+            ],
             if (msg['time'] != null) ...[
               const SizedBox(height: 4),
               Text(
@@ -339,6 +416,138 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  Widget _buildProviderSelectionList(Map<String, String> msg, bool isDark) {
+    try {
+      final List<dynamic> providers = jsonDecode(msg['providers_json'] ?? '[]');
+      if (providers.isEmpty) return const SizedBox.shrink();
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: providers.map<Widget>((provider) {
+          final name = provider['business_name'] ?? 'Provider';
+          final area = provider['area'] ?? '';
+          final rating = provider['rating']?.toString() ?? '0.0';
+          final reviews = provider['review_count']?.toString() ?? '0';
+          final distance = provider['distance'] != null 
+              ? '${provider['distance']} km away' 
+              : null;
+
+          return Container(
+            margin: const EdgeInsets.only(top: 10),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF8F9FA),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: const Color(0xFF1565C0).withOpacity(0.15),
+                width: 1,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        name,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                    ),
+                    if (distance != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1565C0).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          distance,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF1565C0),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Icon(Icons.star_rounded, color: Colors.amber, size: 16),
+                    const SizedBox(width: 4),
+                    Text(
+                      '$rating ($reviews reviews)',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.grey[400] : Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '•',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.grey[600] : Colors.grey[400],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        area,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? Colors.grey[400] : Colors.grey[600],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _isTyping
+                        ? null
+                        : () => _selectProvider(
+                              provider['id'].toString(),
+                              msg['service_type'] ?? '',
+                              msg['location'] ?? '',
+                            ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1565C0),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                    child: const Text(
+                      'Book Partner',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      );
+    } catch (e) {
+      return const SizedBox.shrink();
+    }
+  }
+
 
   Widget _buildInputBar(bool isDark) {
     return Container(

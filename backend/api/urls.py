@@ -8,6 +8,7 @@ urlpatterns = [
     
     # Core Agent Orchestrator
     path('request/', views.process_request, name='process_request'),
+    path('request/select/', views.select_provider, name='select_provider'),
     
     # Bookings (Customer)
     path('bookings/<uuid:pk>/', views.get_booking, name='get_booking'),
