@@ -13,6 +13,7 @@ class User(models.Model):
     location = models.CharField(max_length=255, blank=True, null=True)
     google_email = models.EmailField(blank=True, null=True, unique=True)
     is_google_linked = models.BooleanField(default=False)
+    is_apify_enabled = models.BooleanField(default=False)
     created_at = models.DateTimeField(default=timezone.now)
 
     def __str__(self):
@@ -39,6 +40,7 @@ class Provider(models.Model):
     device_token = models.CharField(max_length=255, blank=True, null=True)
     google_email = models.EmailField(blank=True, null=True, unique=True)
     is_google_linked = models.BooleanField(default=False)
+    is_apify_enabled = models.BooleanField(default=False)
     created_at = models.DateTimeField(default=timezone.now)
 
     def __str__(self):
@@ -107,3 +109,10 @@ class Notification(models.Model):
     body = models.TextField()
     is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(default=timezone.now)
+
+class SystemSetting(models.Model):
+    key = models.CharField(max_length=100, unique=True)
+    value = models.TextField()
+
+    def __str__(self):
+        return f"{self.key}: {self.value}"

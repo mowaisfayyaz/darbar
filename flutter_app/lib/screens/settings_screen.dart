@@ -24,10 +24,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _loadingGoogle = true;
   final _api = ApiService();
 
+  bool _apifyEnabledByAdmin = false;
+  bool _apifyEnabledForUser = false;
+  bool _loadingApify = true;
+
   @override
   void initState() {
     super.initState();
     _checkGoogleStatus();
+    _loadApifySettings();
   }
 
   Future<void> _checkGoogleStatus() async {
@@ -42,6 +47,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
       });
     } catch (e) {
       setState(() => _loadingGoogle = false);
+    }
+  }
+
+  Future<void> _loadApifySettings() async {
+    setState(() => _loadingApify = true);
+    try {
+      final role = widget.isProviderTheme ? 'provider' : 'customer';
+      final config = await _api.getSystemConfig(userId: widget.userId, role: role);
+      setState(() {
+        _apifyEnabledByAdmin = config['apify_enabled_by_admin'] ?? false;
+        _apifyEnabledForUser = config['user_apify_enabled'] ?? false;
+        _loadingApify = false;
+      });
+    } catch (e) {
+      setState(() => _loadingApify = false);
+    }
+  }
+
+  Future<void> _toggleUserApifySetting(bool value) async {
+    try {
+      final role = widget.isProviderTheme ? 'provider' : 'customer';
+      final res = await _api.updateUserApifySetting(
+        userId: widget.userId,
+        role: role,
+        enabled: value,
+      );
+      setState(() {
+        _apifyEnabledForUser = res['is_apify_enabled'] ?? value;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to update Apify setting.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -559,6 +602,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
           ),
+          
+          if (_apifyEnabledByAdmin) ...[
+            const SizedBox(height: 28),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              child: Text(
+                'APIFY SEARCH INTEGRATION',
+                style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1.1),
+              ),
+            ),
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: _loadingApify
+                  ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
+                  : SwitchListTile(
+                      value: _apifyEnabledForUser,
+                      onChanged: (val) => _toggleUserApifySetting(val),
+                      title: const Text(
+                        'Apify Google Maps Data Search',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                      subtitle: const Text(
+                        'Enable background scraping using Apify for highly accurate local recommendations.',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                      secondary: Icon(Icons.api_outlined, color: primaryColor),
+                      activeColor: primaryColor,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+            ),
+          ],
           
           const SizedBox(height: 28),
           

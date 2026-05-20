@@ -1,12 +1,17 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_shell.dart';
 import 'screens/provider_shell.dart';
+import 'screens/admin_panel_screen.dart';
 import 'services/theme_provider.dart';
+import 'services/api_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await ApiService.init();
   runApp(
     ChangeNotifierProvider(
       create: (_) => AppStateProvider(),
@@ -67,7 +72,7 @@ class DarbarApp extends StatelessWidget {
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
-      pageTransitionsTheme: const PageTransitionsTheme(
+      pageTransitionsTheme: PageTransitionsTheme(
         builders: {
           TargetPlatform.android: CupertinoPageTransitionsBuilder(),
           TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
@@ -116,7 +121,7 @@ class DarbarApp extends StatelessWidget {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         color: const Color(0xFF1E1E1E),
       ),
-      pageTransitionsTheme: const PageTransitionsTheme(
+      pageTransitionsTheme: PageTransitionsTheme(
         builders: {
           TargetPlatform.android: CupertinoPageTransitionsBuilder(),
           TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
@@ -186,7 +191,12 @@ class _SplashWrapperState extends State<SplashWrapper> with SingleTickerProvider
     final appState = Provider.of<AppStateProvider>(context, listen: false);
 
     if (appState.isLoggedIn) {
-      if (appState.isProvider) {
+      if (appState.userRole == 'admin') {
+        return AdminPanelScreen(
+          adminId: appState.userId!,
+          adminName: appState.userName ?? 'Super Admin',
+        );
+      } else if (appState.isProvider) {
         return ProviderShell(
           providerId: appState.userId!,
           providerName: appState.userName ?? 'Provider',

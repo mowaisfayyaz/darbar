@@ -39,4 +39,14 @@ urlpatterns = [
     path('auth/google/disconnect/', views.google_disconnect, name='google_disconnect'),
     path('auth/google-login/', views.google_login, name='google_login'),
     path('auth/google/config/', views.google_config, name='google_config'),
+
+    # Admin & System Configurations
+    path('admin/stats/', views.get_admin_stats, name='admin_stats'),
+    path('admin/toggle-apify/', views.toggle_apify, name='toggle_apify'),
+    path('admin/users/', views.get_admin_users, name='admin_users'),
+    path('admin/users/create/', views.admin_create_user, name='admin_create_user'),
+    path('admin/users/update/', views.admin_update_user, name='admin_update_user'),
+    path('admin/users/delete/', views.admin_delete_user, name='admin_delete_user'),
+    path('system-config/', views.get_system_config, name='system_config'),
+    path('users/update-apify/', views.update_user_apify, name='update_user_apify'),
 ]

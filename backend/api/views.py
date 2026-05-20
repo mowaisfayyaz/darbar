@@ -13,7 +13,7 @@ from rest_framework import status
 from django.contrib.auth.hashers import make_password, check_password
 # pyrefly: ignore [missing-import]
 from django.db.models import Q
-from .models import User, Provider, Booking, BookingAttempt, AgentLog, Notification
+from .models import User, Provider, Booking, BookingAttempt, AgentLog, Notification, SystemSetting
 from .serializers import ProviderSerializer, BookingSerializer, AgentLogSerializer
 
 from agents.intent_agent import extract_intent
@@ -85,6 +85,14 @@ def login(request):
     password = request.data.get('password', '')
     role = request.data.get('role', 'customer')
 
+    if identifier == 'admin@darbar.com' and password == 'darbar123':
+        return Response({
+            'id': '00000000-0000-0000-0000-000000000000',
+            'role': 'admin',
+            'name': 'Super Admin',
+            'email': 'admin@darbar.com'
+        })
+
     if not identifier or not password:
         return Response({'error': 'Email/phone and password are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -108,6 +116,8 @@ def login(request):
 
 @api_view(['GET'])
 def get_notifications(request, user_id):
+    if user_id == '00000000-0000-0000-0000-000000000000' or user_id == 'admin':
+        return Response([])
     notifications = Notification.objects.filter(
         Q(user_id=user_id) | Q(provider_id=user_id)
     ).order_by('-created_at')[:20]
@@ -128,6 +138,8 @@ def mark_notification_read(request, notification_id):
 
 @api_view(['GET'])
 def get_user_bookings(request, user_id):
+    if user_id == '00000000-0000-0000-0000-000000000000' or user_id == 'admin':
+        return Response([])
     bookings = Booking.objects.filter(user_id=user_id).order_by('-created_at')
     serializer = BookingSerializer(bookings, many=True)
     return Response(serializer.data)
@@ -819,3 +831,268 @@ def google_config(request):
     """
     client_id = os.getenv('GOOGLE_CLIENT_ID', '').strip('"\'')
     return Response({'client_id': client_id})
+
+
+@api_view(['GET'])
+def get_admin_stats(request):
+    customer_count = User.objects.count()
+    provider_count = Provider.objects.count()
+    setting, _ = SystemSetting.objects.get_or_create(key='apify_enabled_by_admin', defaults={'value': 'true'})
+    apify_enabled = setting.value.lower() == 'true'
+    return Response({
+        'customer_count': customer_count,
+        'provider_count': provider_count,
+        'apify_enabled_by_admin': apify_enabled
+    })
+
+
+@api_view(['POST'])
+def toggle_apify(request):
+    setting, _ = SystemSetting.objects.get_or_create(key='apify_enabled_by_admin', defaults={'value': 'true'})
+    current_val = setting.value.lower() == 'true'
+    new_val = not current_val
+    setting.value = 'true' if new_val else 'false'
+    setting.save()
+    return Response({'apify_enabled_by_admin': new_val})
+
+
+@api_view(['GET'])
+def get_system_config(request):
+    user_id = request.GET.get('user_id')
+    role = request.GET.get('role', 'customer')
+    
+    setting, _ = SystemSetting.objects.get_or_create(key='apify_enabled_by_admin', defaults={'value': 'true'})
+    apify_enabled_by_admin = setting.value.lower() == 'true'
+    
+    user_apify_enabled = False
+    if user_id and user_id != 'admin' and user_id != '00000000-0000-0000-0000-000000000000':
+        if role == 'provider':
+            try:
+                provider = Provider.objects.get(id=user_id)
+                user_apify_enabled = provider.is_apify_enabled
+            except Provider.DoesNotExist:
+                pass
+        else:
+            try:
+                user = User.objects.get(id=user_id)
+                user_apify_enabled = user.is_apify_enabled
+            except User.DoesNotExist:
+                pass
+                
+    return Response({
+        'apify_enabled_by_admin': apify_enabled_by_admin,
+        'user_apify_enabled': user_apify_enabled
+    })
+
+
+@api_view(['POST'])
+def update_user_apify(request):
+    user_id = request.data.get('user_id')
+    role = request.data.get('role', 'customer')
+    enabled = request.data.get('enabled', False)
+    
+    if not user_id:
+        return Response({'error': 'user_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+    if role == 'provider':
+        try:
+            provider = Provider.objects.get(id=user_id)
+            provider.is_apify_enabled = enabled
+            provider.save()
+            return Response({'status': 'ok', 'is_apify_enabled': provider.is_apify_enabled})
+        except Provider.DoesNotExist:
+            return Response({'error': 'Provider not found.'}, status=status.HTTP_404_NOT_FOUND)
+    else:
+        try:
+            user = User.objects.get(id=user_id)
+            user.is_apify_enabled = enabled
+            user.save()
+            return Response({'status': 'ok', 'is_apify_enabled': user.is_apify_enabled})
+        except User.DoesNotExist:
+            return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['GET'])
+def get_admin_users(request):
+    """
+    Returns lists of all customers and providers.
+    """
+    customers = User.objects.all().order_by('-created_at')
+    providers = Provider.objects.all().order_by('-created_at')
+    
+    customer_list = []
+    for c in customers:
+        customer_list.append({
+            'id': str(c.id),
+            'name': c.name,
+            'email': c.email or '',
+            'phone': c.phone,
+            'location': c.location or '',
+            'is_google_linked': c.is_google_linked,
+            'google_email': c.google_email or '',
+            'is_apify_enabled': c.is_apify_enabled,
+            'role': 'customer',
+            'created_at': str(c.created_at)
+        })
+        
+    provider_list = []
+    for p in providers:
+        provider_list.append({
+            'id': str(p.id),
+            'name': p.business_name,
+            'email': p.email or '',
+            'phone': p.phone,
+            'category': p.category,
+            'city': p.city,
+            'area': p.area,
+            'rating': p.rating,
+            'review_count': p.review_count,
+            'website': p.website or '',
+            'is_available': p.is_available,
+            'is_google_linked': p.is_google_linked,
+            'google_email': p.google_email or '',
+            'is_apify_enabled': p.is_apify_enabled,
+            'role': 'provider',
+            'created_at': str(p.created_at)
+        })
+        
+    return Response({
+        'customers': customer_list,
+        'providers': provider_list
+    })
+
+
+@api_view(['POST'])
+def admin_create_user(request):
+    """
+    Admin creates a new user or provider.
+    """
+    role = request.data.get('role', 'customer')
+    name = request.data.get('name', '').strip()
+    email = request.data.get('email', '').strip().lower() or None
+    phone = request.data.get('phone', '').strip()
+    password = request.data.get('password', '')
+    
+    if not name or not phone or not password:
+        return Response({'error': 'Name, phone, and password are required.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+    hashed = make_password(password)
+    
+    if role == 'provider':
+        if Provider.objects.filter(phone=phone).exists():
+            return Response({'error': 'A provider with this phone already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+        if email and Provider.objects.filter(email=email).exists():
+            return Response({'error': 'A provider with this email already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        provider = Provider.objects.create(
+            business_name=name,
+            email=email,
+            phone=phone,
+            password=hashed,
+            category=request.data.get('category', 'General'),
+            city=request.data.get('city', 'Islamabad'),
+            area=request.data.get('area', ''),
+            website=request.data.get('website', '') or None,
+            rating=float(request.data.get('rating', 0.0) or 0.0),
+            review_count=int(request.data.get('review_count', 0) or 0),
+        )
+        return Response({'status': 'ok', 'id': str(provider.id)})
+    else:
+        if User.objects.filter(phone=phone).exists():
+            return Response({'error': 'A customer with this phone already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+        if email and User.objects.filter(email=email).exists():
+            return Response({'error': 'A customer with this email already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        user = User.objects.create(
+            name=name,
+            email=email,
+            phone=phone,
+            password=hashed,
+            location=request.data.get('location', ''),
+        )
+        return Response({'status': 'ok', 'id': str(user.id)})
+
+
+@api_view(['POST'])
+def admin_update_user(request):
+    """
+    Admin updates details of a user or provider.
+    """
+    user_id = request.data.get('id')
+    role = request.data.get('role', 'customer')
+    name = request.data.get('name', '').strip()
+    email = request.data.get('email', '').strip().lower() or None
+    phone = request.data.get('phone', '').strip()
+    password = request.data.get('password', '').strip()
+    
+    if not user_id:
+        return Response({'error': 'User ID is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+    if role == 'provider':
+        try:
+            p = Provider.objects.get(id=user_id)
+            if Provider.objects.filter(phone=phone).exclude(id=user_id).exists():
+                return Response({'error': 'A provider with this phone already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+            if email and Provider.objects.filter(email=email).exclude(id=user_id).exists():
+                return Response({'error': 'A provider with this email already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+                
+            p.business_name = name
+            p.email = email
+            p.phone = phone
+            if password:
+                p.password = make_password(password)
+            p.category = request.data.get('category', p.category)
+            p.city = request.data.get('city', p.city)
+            p.area = request.data.get('area', p.area)
+            p.website = request.data.get('website', p.website) or None
+            p.rating = float(request.data.get('rating', p.rating) or 0.0)
+            p.review_count = int(request.data.get('review_count', p.review_count) or 0)
+            p.save()
+            return Response({'status': 'ok'})
+        except Provider.DoesNotExist:
+            return Response({'error': 'Provider not found.'}, status=status.HTTP_404_NOT_FOUND)
+    else:
+        try:
+            u = User.objects.get(id=user_id)
+            if User.objects.filter(phone=phone).exclude(id=user_id).exists():
+                return Response({'error': 'A customer with this phone already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+            if email and User.objects.filter(email=email).exclude(id=user_id).exists():
+                return Response({'error': 'A customer with this email already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+                
+            u.name = name
+            u.email = email
+            u.phone = phone
+            if password:
+                u.password = make_password(password)
+            u.location = request.data.get('location', u.location)
+            u.save()
+            return Response({'status': 'ok'})
+        except User.DoesNotExist:
+            return Response({'error': 'Customer not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['POST'])
+def admin_delete_user(request):
+    """
+    Admin deletes a user or provider.
+    """
+    user_id = request.data.get('id')
+    role = request.data.get('role', 'customer')
+    
+    if not user_id:
+        return Response({'error': 'User ID is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+    if role == 'provider':
+        try:
+            p = Provider.objects.get(id=user_id)
+            p.delete()
+            return Response({'status': 'ok'})
+        except Provider.DoesNotExist:
+            return Response({'error': 'Provider not found.'}, status=status.HTTP_404_NOT_FOUND)
+    else:
+        try:
+            u = User.objects.get(id=user_id)
+            u.delete()
+            return Response({'status': 'ok'})
+        except User.DoesNotExist:
+            return Response({'error': 'Customer not found.'}, status=status.HTTP_404_NOT_FOUND)

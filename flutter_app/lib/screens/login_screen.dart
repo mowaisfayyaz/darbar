@@ -6,6 +6,7 @@ import '../services/theme_provider.dart';
 import 'register_screen.dart';
 import 'main_shell.dart';
 import 'provider_shell.dart';
+import 'admin_panel_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -73,7 +74,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         userRole: data['role'],
       );
 
-      if (data['role'] == 'provider') {
+      if (data['role'] == 'admin') {
+        Navigator.pushReplacement(context, MaterialPageRoute(
+          builder: (_) => AdminPanelScreen(adminId: data['id'], adminName: data['name']),
+        ));
+      } else if (data['role'] == 'provider') {
         Navigator.pushReplacement(context, MaterialPageRoute(
           builder: (_) => ProviderShell(providerId: data['id'], providerName: data['name']),
         ));
@@ -144,7 +149,12 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       await appState.saveSession(userId: data['id'], userName: data['name'], userEmail: data['email'], userRole: role);
 
       if (mounted) {
-        if (role == 'provider') {
+        final actualRole = data['role'] ?? role;
+        if (actualRole == 'admin') {
+          Navigator.pushReplacement(context, MaterialPageRoute(
+            builder: (_) => AdminPanelScreen(adminId: data['id'], adminName: data['name']),
+          ));
+        } else if (actualRole == 'provider') {
           Navigator.pushReplacement(context, MaterialPageRoute(
             builder: (_) => ProviderShell(providerId: data['id'], providerName: data['name']),
           ));
