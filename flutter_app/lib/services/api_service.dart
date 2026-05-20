@@ -1,11 +1,13 @@
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+String activeBaseUrl = ApiService.baseUrl;
+
 class ApiService {
   // For web browser testing, use localhost
   // For Android emulator, use 10.0.2.2
   // For physical device, use your machine's LAN IP
-  static String activeBaseUrl = 'http://127.0.0.1:8000/api';
+  static const String baseUrl = 'http://185.2.100.202:8000/api';
 
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
