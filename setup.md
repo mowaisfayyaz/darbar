@@ -39,7 +39,7 @@ This document outlines the step-by-step developer environment setup for both the
 5. **Start Django Dev Server**:
    Start the local development server on port 8000.
    ```bash
-   python manage.py runserver 0.0.0.0:8000
+   python3 manage.py runserver 0.0.0.0:8000
    ```
 
 ---

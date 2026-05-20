@@ -1,0 +1,23 @@
+# Checklist: Google Sign-In Integration
+
+- [x] **Phase 1: Backend DB Upgrades**
+  - [x] Add `google_email` and `is_google_linked` to `User` and `Provider` models in `backend/api/models.py`.
+  - [x] Create and run migrations (`makemigrations` & `migrate`).
+- [x] **Phase 2: Backend Authentication View & Route Upgrades**
+  - [x] Update `backend/api/google_oauth.py` to support state-based multi-user authorization.
+  - [x] Update authorization URL view `/api/auth/google/url/` and callback `/api/auth/google/callback/` in `backend/api/views.py`.
+  - [x] Implement secure verify token endpoint `/api/auth/google-login/` in `backend/api/views.py`.
+  - [x] Add route for `/api/auth/google-login/` in `backend/api/urls.py`.
+- [x] **Phase 3: Flutter App Integration**
+  - [x] Add `google_sign_in` package dependency to `flutter_app/pubspec.yaml` and install it.
+  - [x] Add `loginWithGoogle` request method in `flutter_app/lib/services/api_service.dart`.
+  - [x] Pass query parameters in settings OAuth redirect in `flutter_app/lib/screens/settings_screen.dart`.
+  - [x] Integrate "Sign In with Google" button on `flutter_app/lib/screens/login_screen.dart` with role verification.
+- [x] **Phase 4: Verification & Testing**
+  - [x] Verify there are no syntax or compiler errors.
+  - [x] Test the backend server and ensure all endpoints are running smoothly.
+- [x] **Phase 5: Web Integration & Frictionless UX Polish**
+  - [x] Force Google Account Chooser using `signOut()` & `disconnect()` on the client before calling `signIn()`.
+  - [x] Implement backend fallback for `access_token` when client `id_token` is null on Flutter Web.
+  - [x] Support Customer Auto-Registration on first Google Login to simplify the hackathon/teacher presentation.
+  - [x] Configure and whitelist a fixed Flutter Web port `8080` to resolve JavaScript Origin verification errors.
