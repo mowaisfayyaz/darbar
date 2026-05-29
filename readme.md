@@ -18,6 +18,25 @@ Finding reliable service providers (electricians, plumbers, AC technicians) in P
 
 ---
 
+## 👥 User Roles & Types
+
+The platform supports three distinct types of users, each with tailored interfaces and permissions:
+1. **User (Customer)**: Can chat with the Agentic AI helper to describe their booking needs, review matched provider details with agent decision traces, manage bookings, and submit reviews after job completion.
+2. **Provider (Service Partner)**: Can create a business profile, manage and toggle their availability status, add up to 6 service gigs, accept/decline booking requests, and track customer reviews/notifications.
+3. **Admin (Operations Manager)**: Accessible via the Django Admin panel (`/admin/`), allowing management of platform models, moderation of provider listings, and review of operational logs/agent traces.
+
+---
+
+## ✨ Latest Premium Features
+
+Recently added features to elevate platform robustness and user experience:
+- **Navigation App Drawer & Info Hub**: A responsive, theme-aware side navigation drawer containing links to **About Us**, a **Contact Us** query form, and an interactive **FAQ & Support** center.
+- **Clickable Service Gigs**: Provides interactive detail modal views containing pricing ranges, estimated completion times, and full descriptions, accompanied by a custom bottom sheet showing all provider gigs if they exceed 3 items.
+- **Customer Reviews Sheet**: Capped main reviews lists to 3 items, adding an interactive slide-up bottom sheet detailing the provider's complete historical customer reviews.
+- **6-Gig Safeguard Check**: Implemented frontend and backend limits preventing providers from exceeding 6 service listings.
+
+---
+
 ## 🏗️ Architecture
 
 ```mermaid
