@@ -5,6 +5,7 @@ import 'home_screen.dart';
 import 'bookings_screen.dart';
 import 'notifications_screen.dart';
 import 'settings_screen.dart';
+import 'app_drawer.dart';
 
 class MainShell extends StatefulWidget {
   final String userId;
@@ -38,6 +39,7 @@ class _MainShellState extends State<MainShell> {
     final primaryColor = const Color(0xFF1565C0);
 
     return Scaffold(
+      drawer: const AppDrawer(isProviderTheme: false),
       body: IndexedStack(index: _currentIndex, children: _pages),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,

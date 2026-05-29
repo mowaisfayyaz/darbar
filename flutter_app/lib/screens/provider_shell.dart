@@ -5,6 +5,7 @@ import 'provider_dashboard.dart';
 import 'notifications_screen.dart';
 import 'settings_screen.dart';
 import 'provider_profile_screen.dart';
+import 'app_drawer.dart';
 
 class ProviderShell extends StatefulWidget {
   final String providerId;
@@ -37,6 +38,7 @@ class _ProviderShellState extends State<ProviderShell> {
     final isDark = appState.isDarkMode;
 
     return Scaffold(
+      drawer: const AppDrawer(isProviderTheme: true),
       body: IndexedStack(index: _currentIndex, children: _pages),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,

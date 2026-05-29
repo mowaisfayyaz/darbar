@@ -436,16 +436,16 @@ def get_provider_bookings(request, provider_id):
 @api_view(['POST'])
 def provider_respond(request):
     """
-    Provider accepts or declines a booking request.
-    Expects: {booking_id: uuid, provider_id: uuid, action: 'accept'|'decline'}
+    Provider accepts, declines, or completes a booking request.
+    Expects: {booking_id: uuid, provider_id: uuid, action: 'accept'|'decline'|'complete'}
     """
     booking_id = request.data.get('booking_id')
     provider_id = request.data.get('provider_id')
     action = request.data.get('action')
 
-    if not booking_id or not provider_id or action not in ('accept', 'decline'):
+    if not booking_id or not provider_id or action not in ('accept', 'decline', 'complete'):
         return Response(
-            {'error': 'booking_id, provider_id, and valid action (accept/decline) required.'}, 
+            {'error': 'booking_id, provider_id, and valid action (accept/decline/complete) required.'}, 
             status=status.HTTP_400_BAD_REQUEST
         )
 
@@ -486,6 +486,30 @@ def provider_respond(request):
             'status': 'confirmed',
             'booking_id': str(booking.id),
             'message': f'Booking accepted! Customer {booking.user.name} has been notified.'
+        })
+    
+    elif action == 'complete':
+        booking.status = 'completed'
+        booking.save()
+
+        # Notify customer
+        Notification.objects.create(
+            user=booking.user,
+            title="🎉 Service Completed!",
+            body=f"Great news! {booking.provider.business_name} has marked your {booking.service_type} booking ({booking.booking_id}) as completed. Please rate their service!"
+        )
+
+        AgentLog.objects.create(
+            booking=booking,
+            agent_name="Booking Agent",
+            action_taken=f"{booking.provider.business_name} marked booking as completed",
+            reasoning=f"Provider finished the job and marked booking {booking.booking_id} as completed."
+        )
+
+        return Response({
+            'status': 'completed',
+            'booking_id': str(booking.id),
+            'message': 'Booking marked as completed. Customer has been notified.'
         })
     
     else:  # decline
@@ -529,7 +553,7 @@ def get_provider_stats(request, provider_id):
     except Provider.DoesNotExist:
         return Response({'error': 'Provider not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-    total_bookings = Booking.objects.filter(provider=provider).count()
+    total_bookings = Booking.objects.filter(provider=provider, status='completed').count()
     confirmed_bookings = Booking.objects.filter(provider=provider, status='confirmed').count()
     pending_bookings = Booking.objects.filter(provider=provider, status='pending').count()
 
@@ -1218,6 +1242,9 @@ def manage_gigs(request, provider_id):
         session_provider_id = request.headers.get('x-provider-id') or request.session.get('provider_id')
         if str(session_provider_id) != str(provider_id):
             return JsonResponse({'error': 'Unauthorized'}, status=403)
+
+        if ServiceGig.objects.filter(provider=provider).count() >= 6:
+            return Response({'error': 'You can only add up to 6 gigs. Please edit or delete existing ones.'}, status=status.HTTP_400_BAD_REQUEST)
 
         title = request.data.get('title')
         if not title:

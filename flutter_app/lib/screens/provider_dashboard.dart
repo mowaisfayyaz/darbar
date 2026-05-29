@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/api_service.dart';
 import '../services/theme_provider.dart';
+import 'app_drawer.dart';
 
 class ProviderDashboard extends StatefulWidget {
   final String providerId;
@@ -59,10 +60,19 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
         action: action,
       );
       if (mounted) {
+        String msg = 'Booking declined.';
+        Color bgColor = Colors.red;
+        if (action == 'accept') {
+          msg = '✅ Booking accepted! Customer notified.';
+          bgColor = Colors.green;
+        } else if (action == 'complete') {
+          msg = '🎉 Booking marked as completed!';
+          bgColor = Colors.blue;
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(action == 'accept' ? '✅ Booking accepted! Customer notified.' : 'Booking declined.'),
-            backgroundColor: action == 'accept' ? Colors.green : Colors.red,
+            content: Text(msg),
+            backgroundColor: bgColor,
           ),
         );
       }
@@ -103,8 +113,15 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
     final isDark = appState.isDarkMode;
 
     return Scaffold(
+      drawer: const AppDrawer(isProviderTheme: true),
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F7FA),
       appBar: AppBar(
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
         title: const Text('Provider Dashboard', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.green,
         foregroundColor: Colors.white,
@@ -456,15 +473,15 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
               width: double.infinity,
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1565C0),
+                  backgroundColor: Colors.blue,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   elevation: 0,
                 ),
-                icon: const Icon(Icons.check_circle_outline, size: 18),
-                label: const Text('Booking Confirmed'),
-                onPressed: null,
+                icon: const Icon(Icons.check, size: 18),
+                label: const Text('Mark as Completed', style: TextStyle(fontWeight: FontWeight.bold)),
+                onPressed: () => _respondToBooking(booking['id'], 'complete'),
               ),
             ),
           ],

@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import '../services/api_service.dart';
 import '../services/theme_provider.dart';
 import 'edit_gig_screen.dart';
+import 'app_drawer.dart';
 
 class ProviderProfileScreen extends StatefulWidget {
   final String providerId;
@@ -109,26 +110,20 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
       final imageUrl = await _api.uploadImage(bytes, image.name);
 
       if (isProfilePhoto) {
-        // Update local state and backend immediately or on save
         setState(() {
           _providerData['profile_photo'] = imageUrl;
-        });
-        await _api.updateProviderProfile(widget.providerId, {
-          'profile_photo': imageUrl,
+          _isLoading = false;
         });
       } else {
         setState(() {
           _experienceData['cert_image'] = imageUrl;
-        });
-        await _api.updateProviderProfile(widget.providerId, {
-          'cert_image': imageUrl,
+          _isLoading = false;
         });
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Image uploaded successfully!'), backgroundColor: Colors.green),
+        const SnackBar(content: Text('Image uploaded! Click "Save Profile Changes" below to save.'), backgroundColor: Colors.green),
       );
-      _loadProfile();
     } catch (e) {
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -148,6 +143,8 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
         'area': _areaController.text.trim(),
         'years_of_experience': yrs,
         'certifications': _certController.text.trim(),
+        'profile_photo': _providerData['profile_photo'] ?? '',
+        'cert_image': _experienceData['cert_image'] ?? '',
       });
 
       setState(() {
@@ -254,8 +251,17 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
     }
 
     return Scaffold(
+      drawer: widget.isEditable ? const AppDrawer(isProviderTheme: true) : null,
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8F9FA),
       appBar: AppBar(
+        leading: widget.isEditable
+            ? Builder(
+                builder: (context) => IconButton(
+                  icon: const Icon(Icons.menu),
+                  onPressed: () => Scaffold.of(context).openDrawer(),
+                ),
+              )
+            : null,
         title: Text(_isEditing ? 'Edit Profile' : 'Business Profile'),
         backgroundColor: Colors.green,
         foregroundColor: Colors.white,
@@ -459,9 +465,236 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
         Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
       ],
     );
+  }  void _showGigDetails(dynamic gig) {
+    final photos = gig['photos'] as List?;
+    final photoUrl = (photos != null && photos.isNotEmpty) ? photos.first : '';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        contentPadding: EdgeInsets.zero,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                  child: photoUrl.isNotEmpty
+                      ? Image.network(photoUrl, height: 180, width: double.infinity, fit: BoxFit.cover)
+                      : Container(
+                          height: 180,
+                          width: double.infinity,
+                          color: Colors.green.shade50,
+                          child: const Icon(Icons.image, color: Colors.green, size: 64),
+                        ),
+                ),
+                Positioned(
+                  right: 12,
+                  top: 12,
+                  child: CircleAvatar(
+                    backgroundColor: Colors.black54,
+                    child: IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    gig['title'] ?? 'Service Gig',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'PKR ${gig['price_min']} - PKR ${gig['price_max']}',
+                        style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      Row(
+                        children: [
+                          const Icon(Icons.access_time, size: 16, color: Colors.grey),
+                          const SizedBox(width: 4),
+                          Text(
+                            gig['estimated_time'] ?? 'Flexible',
+                            style: const TextStyle(color: Colors.grey, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Description', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  const SizedBox(height: 6),
+                  Text(
+                    gig['description'] ?? 'No description provided.',
+                    style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 13, height: 1.4),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAllGigsSheet() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        height: MediaQuery.of(context).size.height * 0.7,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('All Service Gigs', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ListView.builder(
+                itemCount: _gigs.length,
+                itemBuilder: (context, index) {
+                  final gig = _gigs[index];
+                  final photos = gig['photos'] as List?;
+                  final photoUrl = (photos != null && photos.isNotEmpty) ? photos.first : '';
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.all(8),
+                      leading: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: photoUrl.isNotEmpty
+                            ? Image.network(photoUrl, width: 60, height: 60, fit: BoxFit.cover)
+                            : Container(width: 60, height: 60, color: Colors.green.shade50, child: const Icon(Icons.image, color: Colors.green)),
+                      ),
+                      title: Text(gig['title'] ?? 'Service Gig', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text('PKR ${gig['price_min']} - ${gig['price_max']} • ${gig['estimated_time'] ?? 'Flexible'}'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _showGigDetails(gig);
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAllReviewsSheet() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        height: MediaQuery.of(context).size.height * 0.7,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('All Customer Reviews', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ListView.builder(
+                itemCount: _reviews.length,
+                itemBuilder: (context, index) {
+                  final r = _reviews[index];
+                  return _buildReviewTile(r, isDark);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReviewTile(dynamic r, bool isDark) {
+    final rating = r['rating'] ?? 5;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF2C2C2C) : Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: isDark ? Colors.grey.shade800 : Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 16,
+                    backgroundColor: Colors.green.withOpacity(0.1),
+                    child: const Icon(Icons.person, size: 16, color: Colors.green),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    r['user_name'] ?? 'Customer',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                ],
+              ),
+              Row(
+                children: List.generate(5, (index) {
+                  return Icon(
+                    index < rating ? Icons.star : Icons.star_border,
+                    color: Colors.amber,
+                    size: 14,
+                  );
+                }),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            r['comment'] ?? '',
+            style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 13, height: 1.3),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildGigsSection(bool isDark) {
+    final bool hasMoreThan3 = _gigs.length > 3;
+    final int displayCount = hasMoreThan3 ? 4 : _gigs.length;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -478,6 +711,15 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                 IconButton(
                   icon: const Icon(Icons.add_circle, color: Colors.green),
                   onPressed: () async {
+                    if (_gigs.length >= 6) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Limit reached: You can add a maximum of 6 gigs.'),
+                          backgroundColor: Colors.orange,
+                        ),
+                      );
+                      return;
+                    }
                     final res = await Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -486,6 +728,11 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                     );
                     if (res == true) _loadProfile();
                   },
+                )
+              else if (hasMoreThan3)
+                TextButton(
+                  onPressed: _showAllGigsSheet,
+                  child: const Text('See All', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
                 ),
             ],
           ),
@@ -501,104 +748,147 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _gigs.length,
+              itemCount: displayCount,
               itemBuilder: (ctx, idx) {
+                if (hasMoreThan3 && idx == 3) {
+                  return InkWell(
+                    onTap: _showAllGigsSheet,
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      width: 160,
+                      margin: const EdgeInsets.only(right: 16, bottom: 8),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.green.withOpacity(0.3)),
+                        boxShadow: [
+                          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircleAvatar(
+                            radius: 24,
+                            backgroundColor: Colors.green.withOpacity(0.1),
+                            child: const Icon(Icons.arrow_forward, color: Colors.green),
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'See All Gigs',
+                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${_gigs.length - 3} more gigs',
+                            style: const TextStyle(color: Colors.grey, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
                 final gig = _gigs[idx];
                 final photos = gig['photos'] as List?;
                 final photoUrl = (photos != null && photos.isNotEmpty) ? photos.first : '';
 
-                return Container(
-                  width: 200,
-                  margin: const EdgeInsets.only(right: 16, bottom: 8),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ClipRRect(
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                        child: photoUrl.isNotEmpty
-                            ? Image.network(photoUrl, height: 110, width: double.infinity, fit: BoxFit.cover)
-                            : Container(height: 110, color: Colors.green.shade50, child: const Icon(Icons.image, color: Colors.green)),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              gig['title'] ?? 'Service Gig',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'PKR ${gig['price_min']} - PKR ${gig['price_max']}',
-                              style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13),
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                const Icon(Icons.access_time, size: 12, color: Colors.grey),
-                                const SizedBox(width: 4),
-                                Text(
-                                  gig['estimated_time'] ?? 'Flexible',
-                                  style: const TextStyle(color: Colors.grey, fontSize: 11),
-                                ),
-                              ],
-                            ),
-                          ],
+                return InkWell(
+                  onTap: () => _showGigDetails(gig),
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    width: 200,
+                    margin: const EdgeInsets.only(right: 16, bottom: 8),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ClipRRect(
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                          child: photoUrl.isNotEmpty
+                              ? Image.network(photoUrl, height: 110, width: double.infinity, fit: BoxFit.cover)
+                              : Container(height: 110, color: Colors.green.shade50, child: const Icon(Icons.image, color: Colors.green)),
                         ),
-                      ),
-                      if (widget.isEditable && _isEditing)
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit, size: 18, color: Colors.blue),
-                              onPressed: () async {
-                                final res = await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => EditGigScreen(
-                                      providerId: widget.providerId,
-                                      gig: gig,
+                        Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                gig['title'] ?? 'Service Gig',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'PKR ${gig['price_min']} - PKR ${gig['price_max']}',
+                                style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  const Icon(Icons.access_time, size: 12, color: Colors.grey),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    gig['estimated_time'] ?? 'Flexible',
+                                    style: const TextStyle(color: Colors.grey, fontSize: 11),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (widget.isEditable && _isEditing)
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.edit, size: 18, color: Colors.blue),
+                                onPressed: () async {
+                                  final res = await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => EditGigScreen(
+                                        providerId: widget.providerId,
+                                        gig: gig,
+                                      ),
                                     ),
-                                  ),
-                                );
-                                if (res == true) _loadProfile();
-                              },
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                              onPressed: () async {
-                                final confirm = await showDialog<bool>(
-                                  context: context,
-                                  builder: (c) => AlertDialog(
-                                    title: const Text('Delete Gig?'),
-                                    content: const Text('Are you sure you want to delete this service gig?'),
-                                    actions: [
-                                      TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-                                      TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
-                                    ],
-                                  ),
-                                );
-                                if (confirm == true) {
-                                  setState(() => _isLoading = true);
-                                  await _api.deleteProviderGig(widget.providerId, gig['id']);
-                                  _loadProfile();
-                                }
-                              },
-                            ),
-                          ],
-                        )
-                    ],
+                                  );
+                                  if (res == true) _loadProfile();
+                                },
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete, size: 18, color: Colors.red),
+                                onPressed: () async {
+                                  final confirm = await showDialog<bool>(
+                                    context: context,
+                                    builder: (c) => AlertDialog(
+                                      title: const Text('Delete Gig?'),
+                                      content: const Text('Are you sure you want to delete this service gig?'),
+                                      actions: [
+                                        TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+                                        TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
+                                      ],
+                                    ),
+                                  );
+                                  if (confirm == true) {
+                                    setState(() => _isLoading = true);
+                                    await _api.deleteProviderGig(widget.providerId, gig['id']);
+                                    _loadProfile();
+                                  }
+                                },
+                              ),
+                            ],
+                          )
+                      ],
+                    ),
                   ),
                 );
               },
@@ -635,10 +925,35 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
               decoration: const InputDecoration(labelText: 'Certifications / Credentials'),
             ),
             const SizedBox(height: 12),
-            ElevatedButton.icon(
-              onPressed: () => _pickAndUploadImage(isProfilePhoto: false),
-              icon: const Icon(Icons.upload),
-              label: const Text('Upload Certificate Photo'),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _pickAndUploadImage(isProfilePhoto: false),
+                    icon: const Icon(Icons.upload),
+                    label: const Text('Upload Certificate Photo'),
+                  ),
+                ),
+              ],
+            ),
+            if ((_experienceData['cert_image'] ?? '').isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Text('Preview:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.network(_experienceData['cert_image']),
+              ),
+            ],
+            const SizedBox(height: 20),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                minimumSize: const Size.fromHeight(48),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: _saveProfileChanges,
+              child: const Text('Save Profile Changes', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
             ),
           ] else ...[
             Row(
@@ -667,6 +982,9 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
   }
 
   Widget _buildReviewsSection(bool isDark) {
+    final bool hasMoreThan3 = _reviews.length > 3;
+    final int displayCount = hasMoreThan3 ? 3 : _reviews.length;
+
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.all(16),
@@ -678,24 +996,40 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Customer Reviews', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Customer Reviews', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              if (hasMoreThan3)
+                TextButton(
+                  onPressed: _showAllReviewsSheet,
+                  child: const Text('See All', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                ),
+            ],
+          ),
           const SizedBox(height: 12),
           if (_reviews.isEmpty)
             const Center(child: Text('No reviews yet.'))
-          else
-            ..._reviews.map((r) => ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(r['user_name'] ?? 'Customer'),
-              subtitle: Text(r['comment'] ?? ''),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.star, color: Colors.amber, size: 16),
-                  const SizedBox(width: 4),
-                  Text('${r['rating'] ?? 5}'),
-                ],
+          else ...[
+            ..._reviews.take(displayCount).map((r) => _buildReviewTile(r, isDark)),
+            if (hasMoreThan3) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.green),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: _showAllReviewsSheet,
+                  child: Text(
+                    'See All ${_reviews.length} Reviews',
+                    style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+                  ),
+                ),
               ),
-            )),
+            ],
+          ],
         ],
       ),
     );

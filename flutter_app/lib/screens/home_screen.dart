@@ -5,6 +5,7 @@ import '../services/api_service.dart';
 import '../services/theme_provider.dart';
 import 'processing_screen.dart';
 import 'provider_profile_screen.dart';
+import 'app_drawer.dart';
 
 
 class HomeScreen extends StatefulWidget {
@@ -213,8 +214,15 @@ class _HomeScreenState extends State<HomeScreen> {
     final isDark = appState.isDarkMode;
 
     return Scaffold(
+      drawer: const AppDrawer(isProviderTheme: false),
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F7FA),
       appBar: AppBar(
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
         title: Column(
           children: [
             const Text('Darbar Agent', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),

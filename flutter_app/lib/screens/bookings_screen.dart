@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../services/api_service.dart';
 import '../services/theme_provider.dart';
 import 'booking_confirmed_screen.dart';
+import 'app_drawer.dart';
 
 class BookingsScreen extends StatefulWidget {
   final String userId;
@@ -72,8 +73,15 @@ class _BookingsScreenState extends State<BookingsScreen> {
     final isDark = appState.isDarkMode;
 
     return Scaffold(
+      drawer: const AppDrawer(isProviderTheme: false),
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F7FA),
       appBar: AppBar(
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
         title: const Text('My Bookings', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchBookings),
@@ -360,10 +368,13 @@ class _BookingsScreenState extends State<BookingsScreen> {
                     Navigator.pop(ctx);
                     setState(() => _isLoading = true);
                     try {
-                      await _api.addReview({
+                      final result = await _api.addReview({
                         'booking_id': booking['id'],
                         'rating': rating,
                         'comment': commentController.text.trim(),
+                      });
+                      setState(() {
+                        booking['review'] = result;
                       });
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Review submitted successfully! Thank you.'), backgroundColor: Colors.green),

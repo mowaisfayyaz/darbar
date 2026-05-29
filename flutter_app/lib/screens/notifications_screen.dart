@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/api_service.dart';
 import '../services/theme_provider.dart';
+import 'app_drawer.dart';
 
 class NotificationsScreen extends StatefulWidget {
   final String userId;
@@ -75,8 +76,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final primaryColor = widget.isProviderTheme ? Colors.green : const Color(0xFF1565C0);
     
     return Scaffold(
+      drawer: AppDrawer(isProviderTheme: widget.isProviderTheme),
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F7FA),
       appBar: AppBar(
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
         title: const Text('Notifications', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: primaryColor,
         foregroundColor: Colors.white,

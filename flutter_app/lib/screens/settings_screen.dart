@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
 import '../services/theme_provider.dart';
 import 'login_screen.dart';
+import 'app_drawer.dart';
 
 class SettingsScreen extends StatefulWidget {
   final String userId;
@@ -384,8 +385,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     return Scaffold(
+      drawer: AppDrawer(isProviderTheme: widget.isProviderTheme),
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F7FA),
       appBar: AppBar(
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
         title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: primaryColor,
       ),
