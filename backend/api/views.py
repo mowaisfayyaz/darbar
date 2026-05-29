@@ -13,8 +13,9 @@ from rest_framework import status
 from django.contrib.auth.hashers import make_password, check_password
 # pyrefly: ignore [missing-import]
 from django.db.models import Q
-from .models import User, Provider, Booking, BookingAttempt, AgentLog, Notification, SystemSetting
-from .serializers import ProviderSerializer, BookingSerializer, AgentLogSerializer
+from .models import User, Provider, Booking, BookingAttempt, AgentLog, Notification, SystemSetting, ServiceGig, DiscountBanner, ProviderExperience, Review
+from .serializers import ProviderSerializer, BookingSerializer, AgentLogSerializer, ServiceGigSerializer, DiscountBannerSerializer, ProviderExperienceSerializer, ReviewSerializer
+from django.http import JsonResponse
 
 from agents.intent_agent import extract_intent
 from agents.discovery_agent import discover_providers
@@ -59,6 +60,8 @@ def register(request):
             city=request.data.get('city', 'Islamabad'),
             area=request.data.get('area', ''),
         )
+        request.session['provider_id'] = str(provider.id)
+        request.session.save()
         return Response({'id': str(provider.id), 'role': 'provider', 'name': provider.business_name, 'email': provider.email}, status=status.HTTP_201_CREATED)
     else:
         if User.objects.filter(phone=phone).exists():
@@ -101,6 +104,8 @@ def login(request):
             provider = Provider.objects.get(Q(phone=identifier) | Q(email=identifier))
             if not check_password(password, provider.password):
                 return Response({'error': 'Incorrect password.'}, status=status.HTTP_401_UNAUTHORIZED)
+            request.session['provider_id'] = str(provider.id)
+            request.session.save()
             return Response({'id': str(provider.id), 'role': 'provider', 'name': provider.business_name, 'email': provider.email})
         except Provider.DoesNotExist:
             return Response({'error': 'Provider not found.'}, status=status.HTTP_404_NOT_FOUND)
@@ -1096,3 +1101,267 @@ def admin_delete_user(request):
             return Response({'status': 'ok'})
         except User.DoesNotExist:
             return Response({'error': 'Customer not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+
+import requests
+import uuid
+import os
+
+@api_view(['POST'])
+def upload_image(request):
+    """
+    Upload an image to Supabase Storage.
+    Expects multipart file 'image'
+    """
+    if 'image' not in request.FILES:
+        return Response({'error': 'No image file provided'}, status=status.HTTP_400_BAD_REQUEST)
+        
+    image_file = request.FILES['image']
+    file_bytes = image_file.read()
+    filename = image_file.name
+    content_type = image_file.content_type or 'image/jpeg'
+    
+    try:
+        supabase_url = os.getenv('SUPABASE_URL')
+        supabase_key = os.getenv('SUPABASE_KEY')
+        if not supabase_url or not supabase_key:
+            return Response({'error': 'Supabase configuration missing in environment.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+        supabase_url = supabase_url.rstrip('/')
+        bucket = "provider-assets"
+        ext = os.path.splitext(filename)[1] or ".jpg"
+        unique_filename = f"{uuid.uuid4()}{ext}"
+        
+        url = f"{supabase_url}/storage/v1/object/{bucket}/{unique_filename}"
+        headers = {
+            "Authorization": f"Bearer {supabase_key}",
+            "ApiKey": supabase_key,
+            "Content-Type": content_type
+        }
+        
+        response = requests.post(url, headers=headers, data=file_bytes)
+        if response.status_code != 200:
+            return Response({'error': f'Failed to upload to Supabase: {response.text}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+        public_url = f"{supabase_url}/storage/v1/object/public/{bucket}/{unique_filename}"
+        return Response({'url': public_url})
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET', 'POST'])
+def provider_profile_detail(request, provider_id):
+    """
+    Get or Update Provider Profile.
+    """
+    try:
+        provider = Provider.objects.get(id=provider_id)
+    except Provider.DoesNotExist:
+        return Response({'error': 'Provider not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'POST':
+        # Security session check as required by user (supports custom header fallback for cross-domain CORS compatibility)
+        session_provider_id = request.headers.get('x-provider-id') or request.session.get('provider_id')
+        if str(session_provider_id) != str(provider_id):
+            return JsonResponse({'error': 'Unauthorized'}, status=403)
+
+        provider.business_name = request.data.get('business_name', provider.business_name)
+        provider.category = request.data.get('category', provider.category)
+        provider.city = request.data.get('city', provider.city)
+        provider.area = request.data.get('area', provider.area)
+        provider.price_indicator = request.data.get('price_indicator', provider.price_indicator)
+        provider.profile_photo = request.data.get('profile_photo', provider.profile_photo)
+        provider.years_of_experience = int(request.data.get('years_of_experience', provider.years_of_experience or 0))
+        provider.save()
+
+        # Save/Update experience model
+        exp, _ = ProviderExperience.objects.get_or_create(provider=provider)
+        exp.years_of_experience = provider.years_of_experience
+        exp.certifications = request.data.get('certifications', exp.certifications)
+        exp.cert_image = request.data.get('cert_image', exp.cert_image)
+        if 'past_workplaces' in request.data:
+            exp.past_workplaces = request.data.get('past_workplaces')
+        exp.save()
+
+    # Get related models
+    gigs = ServiceGig.objects.filter(provider=provider, is_active=True)
+    discounts = DiscountBanner.objects.filter(provider=provider, is_active=True)
+    experience, _ = ProviderExperience.objects.get_or_create(provider=provider)
+    reviews = Review.objects.filter(provider=provider).order_by('-created_at')
+
+    provider_data = ProviderSerializer(provider).data
+    provider_data['years_of_experience'] = provider.years_of_experience
+    provider_data['profile_photo'] = provider.profile_photo
+
+    return Response({
+        'provider': provider_data,
+        'gigs': ServiceGigSerializer(gigs, many=True).data,
+        'discounts': DiscountBannerSerializer(discounts, many=True).data,
+        'experience': ProviderExperienceSerializer(experience).data,
+        'reviews': ReviewSerializer(reviews, many=True).data,
+    })
+
+
+@api_view(['GET', 'POST'])
+def manage_gigs(request, provider_id):
+    """
+    GET: List gigs
+    POST: Create gig
+    """
+    try:
+        provider = Provider.objects.get(id=provider_id)
+    except Provider.DoesNotExist:
+        return Response({'error': 'Provider not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'POST':
+        # Security session check as required by user (supports custom header fallback for cross-domain CORS compatibility)
+        session_provider_id = request.headers.get('x-provider-id') or request.session.get('provider_id')
+        if str(session_provider_id) != str(provider_id):
+            return JsonResponse({'error': 'Unauthorized'}, status=403)
+
+        title = request.data.get('title')
+        if not title:
+            return Response({'error': 'Gig Title is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        gig = ServiceGig.objects.create(
+            provider=provider,
+            title=title,
+            description=request.data.get('description', ''),
+            photos=request.data.get('photos', []),
+            price_min=int(request.data.get('price_min', 0)),
+            price_max=int(request.data.get('price_max', 0)),
+            estimated_time=request.data.get('estimated_time', ''),
+            is_active=request.data.get('is_active', True)
+        )
+        return Response(ServiceGigSerializer(gig).data, status=status.HTTP_201_CREATED)
+
+    gigs = ServiceGig.objects.filter(provider=provider)
+    return Response(ServiceGigSerializer(gigs, many=True).data)
+
+
+@api_view(['POST'])
+def edit_gig(request, provider_id, gig_id):
+    """
+    Edit an existing gig.
+    """
+    # Security session check as required by user (supports custom header fallback for cross-domain CORS compatibility)
+    session_provider_id = request.headers.get('x-provider-id') or request.session.get('provider_id')
+    if str(session_provider_id) != str(provider_id):
+        return JsonResponse({'error': 'Unauthorized'}, status=403)
+
+    try:
+        gig = ServiceGig.objects.get(id=gig_id, provider_id=provider_id)
+    except ServiceGig.DoesNotExist:
+        return Response({'error': 'Gig not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    gig.title = request.data.get('title', gig.title)
+    gig.description = request.data.get('description', gig.description)
+    gig.photos = request.data.get('photos', gig.photos)
+    gig.price_min = int(request.data.get('price_min', gig.price_min))
+    gig.price_max = int(request.data.get('price_max', gig.price_max))
+    gig.estimated_time = request.data.get('estimated_time', gig.estimated_time)
+    gig.is_active = request.data.get('is_active', gig.is_active)
+    gig.save()
+
+    return Response(ServiceGigSerializer(gig).data)
+
+
+@api_view(['POST'])
+def delete_gig(request, provider_id, gig_id):
+    """
+    Delete a gig.
+    """
+    # Security session check as required by user (supports custom header fallback for cross-domain CORS compatibility)
+    session_provider_id = request.headers.get('x-provider-id') or request.session.get('provider_id')
+    if str(session_provider_id) != str(provider_id):
+        return JsonResponse({'error': 'Unauthorized'}, status=403)
+
+    try:
+        gig = ServiceGig.objects.get(id=gig_id, provider_id=provider_id)
+        gig.delete()
+        return Response({'status': 'ok'})
+    except ServiceGig.DoesNotExist:
+        return Response({'error': 'Gig not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['GET', 'POST'])
+def manage_discounts(request, provider_id):
+    """
+    GET: Get discounts
+    POST: Create/Update discount
+    """
+    try:
+        provider = Provider.objects.get(id=provider_id)
+    except Provider.DoesNotExist:
+        return Response({'error': 'Provider not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'POST':
+        # Security session check as required by user (supports custom header fallback for cross-domain CORS compatibility)
+        session_provider_id = request.headers.get('x-provider-id') or request.session.get('provider_id')
+        if str(session_provider_id) != str(provider_id):
+            return JsonResponse({'error': 'Unauthorized'}, status=403)
+
+        title = request.data.get('title')
+        discount_percent = int(request.data.get('discount_percent', 0))
+        valid_until = request.data.get('valid_until')
+
+        if not valid_until:
+            return Response({'error': 'Valid until date is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        discount, created = DiscountBanner.objects.get_or_create(provider=provider, defaults={
+            'title': title, 'discount_percent': discount_percent, 'valid_until': valid_until
+        })
+        if not created:
+            discount.title = title
+            discount.discount_percent = discount_percent
+            discount.valid_until = valid_until
+            discount.is_active = request.data.get('is_active', True)
+            discount.save()
+
+        return Response(DiscountBannerSerializer(discount).data)
+
+    discounts = DiscountBanner.objects.filter(provider=provider)
+    return Response(DiscountBannerSerializer(discounts, many=True).data)
+
+
+@api_view(['POST'])
+def add_review(request):
+    """
+    Add a review for a booking.
+    """
+    booking_id = request.data.get('booking_id')
+    rating = int(request.data.get('rating', 5))
+    comment = request.data.get('comment', '')
+
+    try:
+        booking = Booking.objects.get(id=booking_id)
+    except Booking.DoesNotExist:
+        return Response({'error': 'Booking not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Allow review if booking is completed
+    if booking.status != 'completed':
+        return Response({'error': 'You can only review completed bookings.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Check if review already exists
+    if hasattr(booking, 'review'):
+        return Response({'error': 'This booking has already been reviewed.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    provider = booking.provider
+    user = booking.user
+
+    review = Review.objects.create(
+        booking=booking,
+        provider=provider,
+        user=user,
+        rating=rating,
+        comment=comment
+    )
+
+    # Recalculate provider rating
+    reviews = Review.objects.filter(provider=provider)
+    total_rating = sum(r.rating for r in reviews)
+    provider.rating = round(total_rating / len(reviews), 1)
+    provider.review_count = len(reviews)
+    provider.save()
+
+    return Response(ReviewSerializer(review).data, status=status.HTTP_201_CREATED)

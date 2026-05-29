@@ -4,6 +4,7 @@ import '../services/theme_provider.dart';
 import 'provider_dashboard.dart';
 import 'notifications_screen.dart';
 import 'settings_screen.dart';
+import 'provider_profile_screen.dart';
 
 class ProviderShell extends StatefulWidget {
   final String providerId;
@@ -25,6 +26,7 @@ class _ProviderShellState extends State<ProviderShell> {
     _pages = [
       ProviderDashboard(providerId: widget.providerId, providerName: widget.providerName),
       NotificationsScreen(userId: widget.providerId, isProviderTheme: true),
+      ProviderProfileScreen(providerId: widget.providerId, isEditable: true),
       SettingsScreen(userId: widget.providerId, userName: widget.providerName, isProviderTheme: true),
     ];
   }
@@ -52,6 +54,11 @@ class _ProviderShellState extends State<ProviderShell> {
             icon: Icon(Icons.notifications_outlined, color: isDark ? Colors.white70 : Colors.black87),
             selectedIcon: const Icon(Icons.notifications, color: Colors.green),
             label: 'Alerts',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline, color: isDark ? Colors.white70 : Colors.black87),
+            selectedIcon: const Icon(Icons.person, color: Colors.green),
+            label: 'Profile',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined, color: isDark ? Colors.white70 : Colors.black87),

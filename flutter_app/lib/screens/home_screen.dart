@@ -4,6 +4,7 @@ import 'dart:convert';
 import '../services/api_service.dart';
 import '../services/theme_provider.dart';
 import 'processing_screen.dart';
+import 'provider_profile_screen.dart';
 
 
 class HomeScreen extends StatefulWidget {
@@ -513,30 +514,61 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
                 const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _isTyping
-                        ? null
-                        : () => _selectProvider(
-                              provider['id'].toString(),
-                              msg['service_type'] ?? '',
-                              msg['location'] ?? '',
-                            ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1565C0),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _isTyping
+                            ? null
+                            : () => _selectProvider(
+                                  provider['id'].toString(),
+                                  msg['service_type'] ?? '',
+                                  msg['location'] ?? '',
+                                ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1565C0),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                        ),
+                        child: const Text(
+                          'Book Partner',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
                       ),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
                     ),
-                    child: const Text(
-                      'Book Partner',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ProviderProfileScreen(
+                                providerId: provider['id'].toString(),
+                                isEditable: false,
+                              ),
+                            ),
+                          );
+                        },
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Color(0xFF1565C0)),
+                          foregroundColor: const Color(0xFF1565C0),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                        ),
+                        child: const Text(
+                          'View Profile',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ],
             ),

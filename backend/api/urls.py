@@ -49,4 +49,13 @@ urlpatterns = [
     path('admin/users/delete/', views.admin_delete_user, name='admin_delete_user'),
     path('system-config/', views.get_system_config, name='system_config'),
     path('users/update-apify/', views.update_user_apify, name='update_user_apify'),
+
+    # Fiverr-Style Provider Profile & Gig System
+    path('provider/profile/<str:provider_id>/', views.provider_profile_detail, name='provider_profile_detail'),
+    path('provider/gigs/<str:provider_id>/', views.manage_gigs, name='manage_gigs'),
+    path('provider/gigs/<str:provider_id>/edit/<uuid:gig_id>/', views.edit_gig, name='edit_gig'),
+    path('provider/gigs/<str:provider_id>/delete/<uuid:gig_id>/', views.delete_gig, name='delete_gig'),
+    path('provider/discounts/<str:provider_id>/', views.manage_discounts, name='manage_discounts'),
+    path('provider/upload-image/', views.upload_image, name='upload_image'),
+    path('reviews/add/', views.add_review, name='add_review'),
 ]

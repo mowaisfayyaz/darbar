@@ -22,6 +22,10 @@ This document outlines the step-by-step developer environment setup for both the
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate
+
+   Alternatively, you can use the shortcut:
+
+. .venv/bin/activate
    ```
 
 3. **Install Core Dependencies**:
@@ -42,7 +46,21 @@ This document outlines the step-by-step developer environment setup for both the
    python3 manage.py runserver 0.0.0.0:8000
    ```
 
+**kill process**
+   fuser -k 8000/tcp 8081/tcp
+
+
+6. **Run after updating code for flutter**:
+
+flutter build web
 ---
+
+## 1.1 Starting frontend  
+flutter testing command
+http://185.2.100.202:8081/ 
+
+ backend testing url
+ http://185.2.100.202:8000/ 
 
 ## 2. Flutter Client Setup
 

@@ -268,8 +268,30 @@ class _BookingsScreenState extends State<BookingsScreen> {
             // Tap hint
             const SizedBox(height: 10),
             Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                if (status == 'completed' && booking['review'] == null)
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.amber,
+                      foregroundColor: Colors.black87,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    onPressed: () => _showReviewDialog(booking),
+                    icon: const Icon(Icons.rate_review, size: 16),
+                    label: const Text('Leave Review', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  )
+                else if (status == 'completed' && booking['review'] != null)
+                  const Row(
+                    children: [
+                      Icon(Icons.check, size: 14, color: Colors.green),
+                      SizedBox(width: 4),
+                      Text('Reviewed', style: TextStyle(color: Colors.green, fontSize: 12)),
+                    ],
+                  )
+                else
+                  const SizedBox(),
                 Text(
                   'Tap for details & agent traces →',
                   style: TextStyle(fontSize: 11, color: const Color(0xFF1565C0).withOpacity(0.7)),
@@ -279,6 +301,88 @@ class _BookingsScreenState extends State<BookingsScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  void _showReviewDialog(dynamic booking) {
+    int rating = 5;
+    final commentController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text('Leave a Review'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('How was your service with ${booking['provider']?['business_name'] ?? 'the provider'}?'),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(5, (index) {
+                      final starIndex = index + 1;
+                      return IconButton(
+                        icon: Icon(
+                          starIndex <= rating ? Icons.star : Icons.star_border,
+                          color: Colors.amber,
+                          size: 32,
+                        ),
+                        onPressed: () {
+                          setStateDialog(() {
+                            rating = starIndex;
+                          });
+                        },
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: commentController,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Comments (Optional)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    setState(() => _isLoading = true);
+                    try {
+                      await _api.addReview({
+                        'booking_id': booking['id'],
+                        'rating': rating,
+                        'comment': commentController.text.trim(),
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Review submitted successfully! Thank you.'), backgroundColor: Colors.green),
+                      );
+                      _fetchBookings();
+                    } catch (e) {
+                      setState(() => _isLoading = false);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed to submit review: $e'), backgroundColor: Colors.red),
+                      );
+                    }
+                  },
+                  child: const Text('Submit'),
+                ),
+              ],
+            );
+          }
+        );
+      },
     );
   }
 }

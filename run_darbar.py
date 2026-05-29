@@ -85,18 +85,37 @@ def main():
         print_error("Failed to start Django Backend! Please check if port 8000 is occupied.")
         cleanup()
 
-    # 2. Start Flutter Web Client
-    print_info("Launching Flutter Web Client on port 8081...")
+    # 2. Build & Serve Flutter Web Client
     flutter_cwd = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'flutter_app')
+    web_build_dir = os.path.join(flutter_cwd, 'build', 'web')
+
+    # Check if a web build already exists, if not build it
+    if not os.path.isfile(os.path.join(web_build_dir, 'flutter_bootstrap.js')):
+        print_info("Building Flutter Web Client (first time may take ~60s)...")
+        build_result = subprocess.run(
+            ['flutter', 'build', 'web'],
+            cwd=flutter_cwd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        if build_result.returncode != 0:
+            print_error(f"Flutter web build failed! {build_result.stderr}")
+            cleanup()
+        print_success("Flutter web build complete.")
+    else:
+        print_success("Using existing Flutter web build.")
+
+    print_info("Serving Flutter Web Client on port 8081...")
     flutter_proc = subprocess.Popen(
-        ['flutter', 'run', '-d', 'web-server', '--web-port', '8081', '--web-hostname', '0.0.0.0'],
-        cwd=flutter_cwd,
+        ['python3', '-m', 'http.server', '8081', '--bind', '0.0.0.0'],
+        cwd=web_build_dir,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL
     )
     processes.append(flutter_proc)
-    time.sleep(3) # Give it a moment to boot
-    
+    time.sleep(1) # Give it a moment to boot
+
     if flutter_proc.poll() is not None:
         print_error("Failed to start Flutter Web Client! Please check if port 8081 is occupied.")
         cleanup()

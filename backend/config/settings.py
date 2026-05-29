@@ -60,6 +60,11 @@ MIDDLEWARE = [
 
 CORS_ALLOW_ALL_ORIGINS = True
 
+from corsheaders.defaults import default_headers
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'x-provider-id',
+]
+
 ROOT_URLCONF = 'config.urls'
 
 TEMPLATES = [
@@ -92,8 +97,8 @@ if _database_url and not _database_url.startswith('your_') and 'placeholder' not
     DATABASES = {
         'default': dj_database_url.config(
             default=_database_url,
-            conn_max_age=600,
-            conn_health_checks=True,
+            conn_max_age=0,
+            conn_health_checks=False,
         )
     }
 else:

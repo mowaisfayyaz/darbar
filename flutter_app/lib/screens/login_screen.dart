@@ -24,6 +24,15 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   bool _obscurePassword = true;
   String? _error;
 
+  String? _emailError;
+  String? _passwordError;
+  bool _emailTouched = false;
+  bool _passwordTouched = false;
+  final _emailFocus = FocusNode();
+  final _passwordFocus = FocusNode();
+
+  static final _emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
   late Animation<Offset> _slideAnim;
@@ -39,6 +48,23 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       CurvedAnimation(parent: _animController, curve: Curves.easeOut),
     );
     _animController.forward();
+
+    _emailFocus.addListener(() {
+      if (!_emailFocus.hasFocus) {
+        setState(() {
+          _emailTouched = true;
+          _validateEmail();
+        });
+      }
+    });
+    _passwordFocus.addListener(() {
+      if (!_passwordFocus.hasFocus) {
+        setState(() {
+          _passwordTouched = true;
+          _validatePassword();
+        });
+      }
+    });
   }
 
   @override
@@ -46,12 +72,44 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     _animController.dispose();
     _identifierController.dispose();
     _passwordController.dispose();
+    _emailFocus.dispose();
+    _passwordFocus.dispose();
     super.dispose();
   }
 
+  void _validateEmail() {
+    final email = _identifierController.text.trim();
+    if (email.isEmpty) {
+      _emailError = 'Email address is required.';
+    } else if (!_emailRegex.hasMatch(email)) {
+      _emailError = 'Please enter a valid email address.';
+    } else {
+      _emailError = null;
+    }
+  }
+
+  void _validatePassword() {
+    final pass = _passwordController.text;
+    if (pass.isEmpty) {
+      _passwordError = 'Password is required.';
+    } else {
+      _passwordError = null;
+    }
+  }
+
+  bool get _isFormValid => _emailError == null && _passwordError == null &&
+      _identifierController.text.trim().isNotEmpty && _passwordController.text.isNotEmpty;
+
   Future<void> _login() async {
-    if (_identifierController.text.trim().isEmpty || _passwordController.text.isEmpty) {
-      setState(() => _error = 'Please enter your email/phone and password.');
+    setState(() {
+      _emailTouched = true;
+      _passwordTouched = true;
+      _validateEmail();
+      _validatePassword();
+    });
+
+    if (!_isFormValid) {
+      setState(() => _error = 'Please resolve errors in the form.');
       return;
     }
     setState(() { _isLoading = true; _error = null; });
@@ -266,23 +324,32 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   ),
                   const SizedBox(height: 36),
 
-                  // Email / Phone field
+                  // Email Address field
                   TextField(
                     controller: _identifierController,
+                    focusNode: _emailFocus,
+                    keyboardType: TextInputType.emailAddress,
                     style: TextStyle(color: isDark ? Colors.white : Colors.black87),
                     decoration: InputDecoration(
-                      labelText: 'Email or Phone Number',
+                      labelText: 'Email Address',
                       labelStyle: TextStyle(color: isDark ? Colors.grey[400] : null),
-                      prefixIcon: Icon(Icons.person_outline, color: isDark ? Colors.grey[400] : null),
+                      prefixIcon: Icon(Icons.email_outlined, color: isDark ? Colors.grey[400] : null),
                       filled: true,
                       fillColor: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF5F7FA),
+                      errorText: _emailTouched ? _emailError : null,
                     ),
+                    onChanged: (_) {
+                      if (_emailTouched) {
+                        setState(_validateEmail);
+                      }
+                    },
                   ),
                   const SizedBox(height: 14),
 
                   // Password field
                   TextField(
                     controller: _passwordController,
+                    focusNode: _passwordFocus,
                     obscureText: _obscurePassword,
                     style: TextStyle(color: isDark ? Colors.white : Colors.black87),
                     decoration: InputDecoration(
@@ -291,6 +358,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                       prefixIcon: Icon(Icons.lock_outline, color: isDark ? Colors.grey[400] : null),
                       filled: true,
                       fillColor: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF5F7FA),
+                      errorText: _passwordTouched ? _passwordError : null,
                       suffixIcon: IconButton(
                         icon: Icon(
                           _obscurePassword ? Icons.visibility_off : Icons.visibility,
@@ -299,6 +367,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                         onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                       ),
                     ),
+                    onChanged: (_) {
+                      if (_passwordTouched) {
+                        setState(_validatePassword);
+                      }
+                    },
                     onSubmitted: (_) => _login(),
                   ),
                   const SizedBox(height: 12),
@@ -352,7 +425,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                         elevation: 0,
                       ),
-                      onPressed: _isLoading ? null : _login,
+                      onPressed: (_isLoading || !_isFormValid) ? null : _login,
                       child: _isLoading
                           ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
                           : const Text('Sign In', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),

@@ -11,7 +11,22 @@ class ApiService {
 
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
-  ApiService._internal();
+  ApiService._internal() {
+    _dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) async {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final userId = prefs.getString('user_id');
+          if (userId != null) {
+            options.headers['x-provider-id'] = userId;
+          }
+        } catch (e) {
+          print('Error setting x-provider-id header in interceptor: $e');
+        }
+        return handler.next(options);
+      },
+    ));
+  }
 
   final Dio _dio = Dio(BaseOptions(
     baseUrl: activeBaseUrl,
@@ -42,7 +57,18 @@ class ApiService {
       } else {
         // 2. Check SharedPreferences
         String? savedApiUrl = prefs.getString('api_base_url');
-        if (savedApiUrl != null && savedApiUrl.isNotEmpty) {
+        bool isStaleTunnel = false;
+        if (savedApiUrl != null) {
+          bool hostIsIpOrLocal = Uri.base.host == 'localhost' || 
+                                 Uri.base.host == '127.0.0.1' || 
+                                 RegExp(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$').hasMatch(Uri.base.host);
+          bool savedIsTunnel = savedApiUrl.contains('.lhr.life') || savedApiUrl.contains('.localhost.run');
+          if (hostIsIpOrLocal && savedIsTunnel) {
+            isStaleTunnel = true;
+          }
+        }
+
+        if (savedApiUrl != null && savedApiUrl.isNotEmpty && !isStaleTunnel) {
           activeBaseUrl = savedApiUrl;
           print('API Base URL loaded from SharedPreferences: $activeBaseUrl');
         } else {
@@ -305,6 +331,56 @@ class ApiService {
       'id': id,
       'role': role,
     });
+    return response.data;
+  }
+
+  // ==================== PROVIDER PROFILE & GIG SYSTEM ====================
+
+  Future<Map<String, dynamic>> getProviderProfile(String providerId) async {
+    final response = await _dio.get('/provider/profile/$providerId/');
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> updateProviderProfile(String providerId, Map<String, dynamic> data) async {
+    final response = await _dio.post('/provider/profile/$providerId/', data: data);
+    return response.data;
+  }
+
+  Future<List<dynamic>> getProviderGigs(String providerId) async {
+    final response = await _dio.get('/provider/gigs/$providerId/');
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> createProviderGig(String providerId, Map<String, dynamic> data) async {
+    final response = await _dio.post('/provider/gigs/$providerId/', data: data);
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> editProviderGig(String providerId, String gigId, Map<String, dynamic> data) async {
+    final response = await _dio.post('/provider/gigs/$providerId/edit/$gigId/', data: data);
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> deleteProviderGig(String providerId, String gigId) async {
+    final response = await _dio.post('/provider/gigs/$providerId/delete/$gigId/');
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> manageDiscounts(String providerId, Map<String, dynamic> data) async {
+    final response = await _dio.post('/provider/discounts/$providerId/', data: data);
+    return response.data;
+  }
+
+  Future<String> uploadImage(List<int> fileBytes, String filename) async {
+    final formData = FormData.fromMap({
+      'image': MultipartFile.fromBytes(fileBytes, filename: filename),
+    });
+    final response = await _dio.post('/provider/upload-image/', data: formData);
+    return response.data['url'];
+  }
+
+  Future<Map<String, dynamic>> addReview(Map<String, dynamic> data) async {
+    final response = await _dio.post('/reviews/add/', data: data);
     return response.data;
   }
 }

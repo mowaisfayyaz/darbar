@@ -131,8 +131,14 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
                     padding: const EdgeInsets.all(16),
                     children: [
                       // Stats header
-                      if (_stats != null) _buildStatsCard(isDark),
+                      _buildStatsCard(isDark),
                       const SizedBox(height: 20),
+                      
+                      // Welcome banner if new provider (0 bookings and 0 total jobs)
+                      if (_bookings.isEmpty && (_stats?['total_bookings'] ?? 0) == 0) ...[
+                        _buildWelcomeBanner(isDark),
+                        const SizedBox(height: 20),
+                      ],
                       
                       // Section header
                       Row(
@@ -192,7 +198,51 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
     );
   }
 
+  Widget _buildWelcomeBanner(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E2E1E) : Colors.green.shade50,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.green.withOpacity(0.3), width: 1),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.stars_rounded, color: Colors.green, size: 40),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Welcome to Darbar!',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Complete your profile and toggle Online to start receiving client booking requests.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark ? Colors.grey[300] : Colors.grey[700],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStatsCard(bool isDark) {
+    final stats = _stats ?? {};
+    final isOnline = stats['is_available'] == true;
+    final ratingVal = double.tryParse(stats['rating']?.toString() ?? '0') ?? 0.0;
+    
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -213,12 +263,12 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _stats!['provider_name'] ?? widget.providerName,
+                    stats['provider_name'] ?? widget.providerName,
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    _stats!['category'] ?? 'Service Provider',
+                    stats['category'] ?? 'Service Provider',
                     style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13),
                   ),
                 ],
@@ -235,13 +285,13 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        _stats!['is_available'] == true ? Icons.circle : Icons.circle_outlined,
+                        isOnline ? Icons.circle : Icons.circle_outlined,
                         size: 10,
-                        color: _stats!['is_available'] == true ? Colors.greenAccent : Colors.white54,
+                        color: isOnline ? Colors.greenAccent : Colors.white54,
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        _stats!['is_available'] == true ? 'Online' : 'Offline',
+                        isOnline ? 'Online' : 'Offline',
                         style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                       ),
                     ],
@@ -253,12 +303,21 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
           const SizedBox(height: 20),
           Row(
             children: [
-              _statItem('Rating', '${_stats!['rating'] ?? 0} ⭐'),
-              _statItem('Reviews', '${_stats!['review_count'] ?? 0}'),
-              _statItem('Total Jobs', '${_stats!['total_bookings'] ?? 0}'),
-              _statItem('Pending', '${_stats!['pending_bookings'] ?? 0}'),
+              _statItem('Rating', '${stats['rating'] ?? 0.0} ⭐'),
+              _statItem('Reviews', '${stats['review_count'] ?? 0}'),
+              _statItem('Total Jobs', '${stats['total_bookings'] ?? 0}'),
+              _statItem('Pending', '${stats['pending_bookings'] ?? 0}'),
             ],
           ),
+          if (ratingVal == 0.0) ...[
+            const SizedBox(height: 12),
+            const Divider(color: Colors.white30, height: 1),
+            const SizedBox(height: 8),
+            const Text(
+              'Rating will appear after your first completed job',
+              style: TextStyle(color: Colors.white70, fontSize: 11, fontStyle: FontStyle.italic),
+            ),
+          ],
         ],
       ),
     );
@@ -352,7 +411,7 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
               Icon(Icons.person_outline, color: isDark ? Colors.grey[400] : Colors.grey, size: 18),
               const SizedBox(width: 6),
               Text(
-                'Customer: ${booking['user']?['name'] ?? 'N/A'}',
+                'Customer: ${booking['user'] is Map ? (booking['user']['name'] ?? 'N/A') : (booking['user'] ?? 'N/A')}',
                 style: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
               ),
             ],

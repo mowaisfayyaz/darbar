@@ -43,8 +43,14 @@ class Provider(models.Model):
     is_apify_enabled = models.BooleanField(default=False)
     created_at = models.DateTimeField(default=timezone.now)
 
+    profile_photo = models.CharField(max_length=500, blank=True, default='')
+    years_of_experience = models.IntegerField(default=0)
+
     def __str__(self):
         return f"{self.business_name} ({self.category})"
+
+
+
 
 class Booking(models.Model):
     STATUS_CHOICES = (
@@ -116,3 +122,56 @@ class SystemSetting(models.Model):
 
     def __str__(self):
         return f"{self.key}: {self.value}"
+
+
+class ServiceGig(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    provider = models.ForeignKey(Provider, on_delete=models.CASCADE, related_name='gigs')
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    photos = models.JSONField(default=list, blank=True)  # List of URLs
+    price_min = models.IntegerField(default=0)
+    price_max = models.IntegerField(default=0)
+    estimated_time = models.CharField(max_length=100, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"{self.title} - {self.provider.business_name}"
+
+
+class DiscountBanner(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    provider = models.ForeignKey(Provider, on_delete=models.CASCADE, related_name='discounts')
+    title = models.CharField(max_length=255)
+    discount_percent = models.IntegerField(default=0)
+    valid_until = models.DateField()
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.discount_percent}% off - {self.provider.business_name}"
+
+
+class ProviderExperience(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    provider = models.ForeignKey(Provider, on_delete=models.CASCADE, related_name='experience')
+    years_of_experience = models.IntegerField(default=0)
+    past_workplaces = models.JSONField(default=list, blank=True)  # List of strings/dicts
+    certifications = models.TextField(blank=True)
+    cert_image = models.CharField(max_length=500, blank=True, default='')
+
+    def __str__(self):
+        return f"Experience for {self.provider.business_name}"
+
+
+class Review(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    booking = models.OneToOneField(Booking, on_delete=models.CASCADE, related_name='review')
+    provider = models.ForeignKey(Provider, on_delete=models.CASCADE, related_name='reviews')
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    rating = models.IntegerField(default=5)  # 1-5
+    comment = models.TextField(blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"Review ({self.rating}) by {self.user.name} for {self.provider.business_name}"
