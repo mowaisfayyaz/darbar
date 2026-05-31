@@ -146,12 +146,14 @@ class ApiService {
     required String providerId,
     required String serviceType,
     required String location,
+    String? scheduledTime,
   }) async {
     final response = await _dio.post('/request/select/', data: {
       'user_id': userId,
       'provider_id': providerId,
       'service_type': serviceType,
       'location': location,
+      if (scheduledTime != null) 'scheduled_time': scheduledTime,
     });
     return response.data;
   }

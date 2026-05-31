@@ -83,7 +83,10 @@ class _ProcessingScreenState extends State<ProcessingScreen> with TickerProvider
           ),
         ),
         child: SafeArea(
-          child: Column(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 600),
+              child: Column(
             children: [
               const SizedBox(height: 40),
 
@@ -159,6 +162,8 @@ class _ProcessingScreenState extends State<ProcessingScreen> with TickerProvider
               ),
             ],
           ),
+          ),
+        ),
         ),
       ),
     );

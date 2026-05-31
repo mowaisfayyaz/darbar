@@ -12,8 +12,11 @@ class AboutUsScreen extends StatelessWidget {
         backgroundColor: themeColor,
         foregroundColor: Colors.white,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -86,6 +89,8 @@ class AboutUsScreen extends StatelessWidget {
           ],
         ),
       ),
+          ),
+        ),
     );
   }
 
@@ -168,8 +173,11 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
         backgroundColor: widget.themeColor,
         foregroundColor: Colors.white,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -245,6 +253,8 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
           ],
         ),
       ),
+          ),
+        ),
     );
   }
 
@@ -306,8 +316,11 @@ class FaqScreen extends StatelessWidget {
         backgroundColor: themeColor,
         foregroundColor: Colors.white,
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16.0),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16.0),
         itemCount: faqs.length,
         itemBuilder: (ctx, index) {
           final faq = faqs[index];
@@ -330,6 +343,8 @@ class FaqScreen extends StatelessWidget {
           );
         },
       ),
+          ),
+        ),
     );
   }
 }

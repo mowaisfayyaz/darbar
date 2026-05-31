@@ -279,16 +279,21 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
             ),
         ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            _buildHeaderSection(isDark),
-            if (_discounts.isNotEmpty) _buildDiscountBannerSection(isDark),
-            _buildStatsBar(isDark),
-            _buildGigsSection(isDark),
-            _buildExperienceSection(isDark),
-            _buildReviewsSection(isDark),
-          ],
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 850),
+          child: SingleChildScrollView(
+            child: Column(
+              children: [
+                _buildHeaderSection(isDark),
+                if (_discounts.isNotEmpty) _buildDiscountBannerSection(isDark),
+                _buildStatsBar(isDark),
+                _buildGigsSection(isDark),
+                _buildExperienceSection(isDark),
+                _buildReviewsSection(isDark),
+              ],
+            ),
+          ),
         ),
       ),
     );

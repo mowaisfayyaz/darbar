@@ -116,11 +116,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchNotifications),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _fetchNotifications,
-        color: primaryColor,
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 850),
+          child: RefreshIndicator(
+            onRefresh: _fetchNotifications,
+            color: primaryColor,
         child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
+            ? const NotificationSkeletonLoader()
             : _error != null
                 ? ListView(
                     padding: const EdgeInsets.all(24),
@@ -245,6 +248,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           );
                         },
                       ),
+          ),
+        ),
       ),
     );
   }
@@ -271,5 +276,115 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     } catch (_) {
       return timestamp.substring(0, 16);
     }
+  }
+}
+
+class NotificationSkeletonLoader extends StatefulWidget {
+  const NotificationSkeletonLoader({super.key});
+
+  @override
+  State<NotificationSkeletonLoader> createState() => _NotificationSkeletonLoaderState();
+}
+
+class _NotificationSkeletonLoaderState extends State<NotificationSkeletonLoader> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final baseColor = isDark ? Colors.grey[850]! : Colors.grey[300]!;
+
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final opacity = 0.4 + (_controller.value * 0.4);
+        return Opacity(
+          opacity: opacity,
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: 5,
+            physics: const NeverScrollableScrollPhysics(),
+            itemBuilder: (context, index) {
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(isDark ? 0.12 : 0.04),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: baseColor,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 120,
+                            height: 14,
+                            decoration: BoxDecoration(
+                              color: baseColor,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            width: double.infinity,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: baseColor,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Container(
+                            width: 60,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: baseColor,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
   }
 }

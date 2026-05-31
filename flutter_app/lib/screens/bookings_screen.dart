@@ -84,6 +84,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
             'provider_reviews': booking['provider']?['review_count'],
             'service_type': booking['service_type'],
             'location': booking['location'],
+            'scheduled_time': booking['scheduled_time'],
             'message': 'View agent traces below for detailed reasoning.',
           },
         ),
@@ -113,20 +114,25 @@ class _BookingsScreenState extends State<BookingsScreen> {
           IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchBookings),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _fetchBookings,
-        color: const Color(0xFF1565C0),
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _error != null
-                ? _buildErrorState(isDark)
-                : _bookings.isEmpty
-                    ? _buildEmptyState(isDark)
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _bookings.length,
-                        itemBuilder: (context, index) => _buildBookingCard(_bookings[index], isDark),
-                      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 850),
+          child: RefreshIndicator(
+            onRefresh: _fetchBookings,
+            color: const Color(0xFF1565C0),
+            child: _isLoading
+                ? const BookingSkeletonLoader()
+                : _error != null
+                    ? _buildErrorState(isDark)
+                    : _bookings.isEmpty
+                        ? _buildEmptyState(isDark)
+                        : ListView.builder(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: _bookings.length,
+                            itemBuilder: (context, index) => _buildBookingCard(_bookings[index], isDark),
+                          ),
+          ),
+        ),
       ),
     );
   }
@@ -274,6 +280,20 @@ class _BookingsScreenState extends State<BookingsScreen> {
               ],
             ),
 
+            if (booking['scheduled_time'] != null) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Icon(Icons.calendar_today_outlined, size: 16, color: isDark ? Colors.grey[400] : Colors.grey),
+                  const SizedBox(width: 4),
+                  Text(
+                    _formatScheduledTime(booking['scheduled_time']),
+                    style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 13),
+                  ),
+                ],
+              ),
+            ],
+
             // Provider info
             if (booking['provider'] != null) ...[
               const SizedBox(height: 8),
@@ -418,6 +438,167 @@ class _BookingsScreenState extends State<BookingsScreen> {
               ],
             );
           }
+        );
+      },
+    );
+  }
+
+  String _formatScheduledTime(String? timeStr) {
+    if (timeStr == null || timeStr.isEmpty) return 'Flexible / ASAP';
+    try {
+      final dateTime = DateTime.parse(timeStr);
+      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      final month = months[dateTime.month - 1];
+      final day = dateTime.day;
+      final year = dateTime.year;
+      final hourVal = dateTime.hour;
+      final minuteVal = dateTime.minute.toString().padLeft(2, '0');
+      final period = hourVal >= 12 ? 'PM' : 'AM';
+      final hour = hourVal == 0 ? 12 : (hourVal > 12 ? hourVal - 12 : hourVal);
+      return '$month $day, $year at $hour:$minuteVal $period';
+    } catch (e) {
+      return timeStr;
+    }
+  }
+}
+
+class BookingSkeletonLoader extends StatefulWidget {
+  const BookingSkeletonLoader({super.key});
+
+  @override
+  State<BookingSkeletonLoader> createState() => _BookingSkeletonLoaderState();
+}
+
+class _BookingSkeletonLoaderState extends State<BookingSkeletonLoader> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final baseColor = isDark ? Colors.grey[850]! : Colors.grey[300]!;
+    
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final opacity = 0.4 + (_controller.value * 0.4);
+        return Opacity(
+          opacity: opacity,
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: 4,
+            physics: const NeverScrollableScrollPhysics(),
+            itemBuilder: (context, index) {
+              return Container(
+                margin: const EdgeInsets.only(bottom: 14),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(isDark ? 0.15 : 0.04),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Container(
+                          width: 80,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: baseColor,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        Container(
+                          width: 70,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color: baseColor,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      width: 140,
+                      height: 18,
+                      decoration: BoxDecoration(
+                        color: baseColor,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Container(
+                          width: 16,
+                          height: 16,
+                          decoration: BoxDecoration(
+                            color: baseColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          width: 100,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: baseColor,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Container(
+                          width: 16,
+                          height: 16,
+                          decoration: BoxDecoration(
+                            color: baseColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          width: 120,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: baseColor,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
         );
       },
     );

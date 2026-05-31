@@ -272,8 +272,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : Colors.white,
       body: SafeArea(
-        child: FadeTransition(
-          opacity: _fadeAnim,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: FadeTransition(
+              opacity: _fadeAnim,
           child: SlideTransition(
             position: _slideAnim,
             child: SingleChildScrollView(
@@ -425,7 +428,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                         elevation: 0,
                       ),
-                      onPressed: (_isLoading || !_isFormValid) ? null : _login,
+                      onPressed: _isLoading ? null : _login,
                       child: _isLoading
                           ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
                           : const Text('Sign In', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
@@ -487,6 +490,8 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                 ],
               ),
             ),
+          ),
+        ),
           ),
         ),
       ),

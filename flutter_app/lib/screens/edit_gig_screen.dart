@@ -132,8 +132,11 @@ class _EditGigScreenState extends State<EditGigScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.green))
-          : Form(
-              key: _formKey,
+          : Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 700),
+                child: Form(
+                  key: _formKey,
               child: ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
@@ -293,6 +296,8 @@ class _EditGigScreenState extends State<EditGigScreen> {
                 ],
               ),
             ),
+          ),
+        ),
     );
   }
 }

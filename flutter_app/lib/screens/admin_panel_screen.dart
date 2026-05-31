@@ -492,12 +492,17 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             ],
           ),
         ),
-        body: TabBarView(
-          children: [
-            _buildDashboardTab(isDark, primaryColor, accentColor),
-            _buildCustomersTab(isDark, primaryColor),
-            _buildProvidersTab(isDark, primaryColor),
-          ],
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 850),
+            child: TabBarView(
+              children: [
+                _buildDashboardTab(isDark, primaryColor, accentColor),
+                _buildCustomersTab(isDark, primaryColor),
+                _buildProvidersTab(isDark, primaryColor),
+              ],
+            ),
+          ),
         ),
       ),
     );

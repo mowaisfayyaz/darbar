@@ -142,8 +142,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
         backgroundColor: themeColor,
         foregroundColor: Colors.white,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -273,6 +276,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ],
         ),
       ),
+          ),
+        ),
     );
   }
 

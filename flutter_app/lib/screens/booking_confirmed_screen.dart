@@ -69,8 +69,11 @@ class _BookingConfirmedScreenState extends State<BookingConfirmedScreen> with Si
           onPressed: () => Navigator.popUntil(context, (route) => route.isFirst),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 850),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -251,6 +254,10 @@ class _BookingConfirmedScreenState extends State<BookingConfirmedScreen> with Si
                   _detailRow(Icons.build_outlined, 'Service', data['service_type'] ?? 'N/A', isDark),
                   const Divider(height: 20),
                   _detailRow(Icons.location_on_outlined, 'Location', data['location'] ?? 'N/A', isDark),
+                  if (data['scheduled_time'] != null) ...[
+                    const Divider(height: 20),
+                    _detailRow(Icons.calendar_today_outlined, 'Scheduled Time', _formatScheduledTime(data['scheduled_time']), isDark),
+                  ],
                   if (data['human_booking_id'] != null) ...[
                     const Divider(height: 20),
                     _detailRow(Icons.confirmation_number_outlined, 'Booking ID', data['human_booking_id'], isDark),
@@ -393,6 +400,8 @@ class _BookingConfirmedScreenState extends State<BookingConfirmedScreen> with Si
           ],
         ),
       ),
+          ),
+        ),
     );
   }
 
@@ -417,6 +426,24 @@ class _BookingConfirmedScreenState extends State<BookingConfirmedScreen> with Si
         ),
       ],
     );
+  }
+
+  String _formatScheduledTime(String? timeStr) {
+    if (timeStr == null || timeStr.isEmpty) return 'Flexible / ASAP';
+    try {
+      final dateTime = DateTime.parse(timeStr);
+      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      final month = months[dateTime.month - 1];
+      final day = dateTime.day;
+      final year = dateTime.year;
+      final hourVal = dateTime.hour;
+      final minuteVal = dateTime.minute.toString().padLeft(2, '0');
+      final period = hourVal >= 12 ? 'PM' : 'AM';
+      final hour = hourVal == 0 ? 12 : (hourVal > 12 ? hourVal - 12 : hourVal);
+      return '$month $day, $year at $hour:$minuteVal $period';
+    } catch (e) {
+      return timeStr;
+    }
   }
 
   Widget _buildTraceItem(Map<String, dynamic> log, bool isLast, bool isDark) {

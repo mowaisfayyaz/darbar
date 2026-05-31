@@ -158,26 +158,29 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadData,
-        color: Colors.green,
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator(color: Colors.green))
-            : _error != null
-                ? ListView(
-                    padding: const EdgeInsets.all(24),
-                    children: [
-                      const SizedBox(height: 100),
-                      const Icon(Icons.cloud_off, size: 64, color: Colors.grey),
-                      const SizedBox(height: 16),
-                      Text(_error!, textAlign: TextAlign.center, style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey)),
-                    ],
-                  )
-                : ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      // Stats header
-                      _buildStatsCard(isDark),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 850),
+          child: RefreshIndicator(
+            onRefresh: _loadData,
+            color: Colors.green,
+            child: _isLoading
+                ? const DashboardSkeletonLoader()
+                : _error != null
+                    ? ListView(
+                        padding: const EdgeInsets.all(24),
+                        children: [
+                          const SizedBox(height: 100),
+                          const Icon(Icons.cloud_off, size: 64, color: Colors.grey),
+                          const SizedBox(height: 16),
+                          Text(_error!, textAlign: TextAlign.center, style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey)),
+                        ],
+                      )
+                    : ListView(
+                        padding: const EdgeInsets.all(16),
+                        children: [
+                          // Stats header
+                          _buildStatsCard(isDark),
                       const SizedBox(height: 20),
                       
                       // Welcome banner if new provider (0 bookings and 0 total jobs)
@@ -240,6 +243,8 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
                         ..._bookings.map((booking) => _buildBookingCard(booking, isDark)),
                     ],
                   ),
+          ),
+        ),
       ),
     );
   }
@@ -451,6 +456,19 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
               ),
             ],
           ),
+          if (booking['scheduled_time'] != null) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(Icons.calendar_today_outlined, color: isDark ? Colors.grey[400] : Colors.grey, size: 18),
+                const SizedBox(width: 6),
+                Text(
+                  _formatScheduledTime(booking['scheduled_time']),
+                  style: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 6),
           Row(
             children: [
@@ -516,6 +534,157 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
           ],
         ],
       ),
+    );
+  }
+
+  String _formatScheduledTime(String? timeStr) {
+    if (timeStr == null || timeStr.isEmpty) return 'Flexible / ASAP';
+    try {
+      final dateTime = DateTime.parse(timeStr);
+      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      final month = months[dateTime.month - 1];
+      final day = dateTime.day;
+      final year = dateTime.year;
+      final hourVal = dateTime.hour;
+      final minuteVal = dateTime.minute.toString().padLeft(2, '0');
+      final period = hourVal >= 12 ? 'PM' : 'AM';
+      final hour = hourVal == 0 ? 12 : (hourVal > 12 ? hourVal - 12 : hourVal);
+      return '$month $day, $year at $hour:$minuteVal $period';
+    } catch (e) {
+      return timeStr;
+    }
+  }
+}
+
+class DashboardSkeletonLoader extends StatefulWidget {
+  const DashboardSkeletonLoader({super.key});
+
+  @override
+  State<DashboardSkeletonLoader> createState() => _DashboardSkeletonLoaderState();
+}
+
+class _DashboardSkeletonLoaderState extends State<DashboardSkeletonLoader> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final baseColor = isDark ? Colors.grey[850]! : Colors.grey[300]!;
+
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final opacity = 0.4 + (_controller.value * 0.4);
+        return Opacity(
+          opacity: opacity,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            physics: const NeverScrollableScrollPhysics(),
+            children: [
+              // Stats Card skeleton
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(isDark ? 0.15 : 0.04),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Container(width: 120, height: 16, decoration: BoxDecoration(color: baseColor, borderRadius: BorderRadius.circular(4))),
+                        Container(width: 80, height: 12, decoration: BoxDecoration(color: baseColor, borderRadius: BorderRadius.circular(4))),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: List.generate(3, (index) => Column(
+                        children: [
+                          Container(width: 40, height: 24, decoration: BoxDecoration(color: baseColor, borderRadius: BorderRadius.circular(4))),
+                          const SizedBox(height: 8),
+                          Container(width: 60, height: 12, decoration: BoxDecoration(color: baseColor, borderRadius: BorderRadius.circular(4))),
+                        ],
+                      )),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              // Section Header skeleton
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(width: 150, height: 18, decoration: BoxDecoration(color: baseColor, borderRadius: BorderRadius.circular(4))),
+                  Container(width: 60, height: 14, decoration: BoxDecoration(color: baseColor, borderRadius: BorderRadius.circular(4))),
+                ],
+              ),
+              const SizedBox(height: 16),
+              // Incoming request list skeletons
+              ...List.generate(2, (index) => Container(
+                margin: const EdgeInsets.only(bottom: 14),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(isDark ? 0.15 : 0.04),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Container(width: 90, height: 12, decoration: BoxDecoration(color: baseColor, borderRadius: BorderRadius.circular(4))),
+                        Container(width: 60, height: 18, decoration: BoxDecoration(color: baseColor, borderRadius: BorderRadius.circular(8))),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Container(width: 160, height: 16, decoration: BoxDecoration(color: baseColor, borderRadius: BorderRadius.circular(4))),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Container(width: 14, height: 14, decoration: BoxDecoration(color: baseColor, shape: BoxShape.circle)),
+                        const SizedBox(width: 8),
+                        Container(width: 110, height: 12, decoration: BoxDecoration(color: baseColor, borderRadius: BorderRadius.circular(4))),
+                      ],
+                    ),
+                  ],
+                ),
+              )),
+            ],
+          ),
+        );
+      },
     );
   }
 }

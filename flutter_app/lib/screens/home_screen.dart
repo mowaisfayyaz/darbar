@@ -113,6 +113,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   'provider_reviews': data['provider_reviews'],
                   'service_type': data['service_type'],
                   'location': data['location'],
+                  'scheduled_time': data['scheduled_time'],
                   'message': data['message'],
                 },
               ),
@@ -150,6 +151,7 @@ class _HomeScreenState extends State<HomeScreen> {
         providerId: providerId,
         serviceType: serviceType,
         location: location,
+        scheduledTime: _pendingTime,
       );
 
       if (!mounted) return;
@@ -175,6 +177,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 'provider_reviews': data['provider_reviews'],
                 'service_type': data['service_type'],
                 'location': data['location'],
+                'scheduled_time': data['scheduled_time'],
                 'message': data['message'],
               },
             ),
@@ -243,21 +246,26 @@ class _HomeScreenState extends State<HomeScreen> {
           )
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: _messages.isEmpty
-                ? _buildEmptyState(isDark)
-                : ListView.builder(
-                    controller: _scroll,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _messages.length,
-                    itemBuilder: (context, index) => _buildMessage(_messages[index], isDark),
-                  ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 850),
+          child: Column(
+            children: [
+              Expanded(
+                child: _messages.isEmpty
+                    ? _buildEmptyState(isDark)
+                    : ListView.builder(
+                        controller: _scroll,
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _messages.length,
+                        itemBuilder: (context, index) => _buildMessage(_messages[index], isDark),
+                      ),
+              ),
+              if (_isTyping) _buildTypingIndicator(isDark),
+              _buildInputBar(isDark),
+            ],
           ),
-          if (_isTyping) _buildTypingIndicator(isDark),
-          _buildInputBar(isDark),
-        ],
+        ),
       ),
     );
   }

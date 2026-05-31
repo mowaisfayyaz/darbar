@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'info_screens.dart';
+import 'login_screen.dart';
+import '../services/theme_provider.dart';
 
 class AppDrawer extends StatelessWidget {
   final bool isProviderTheme;
@@ -74,6 +77,50 @@ class AppDrawer extends StatelessWidget {
             label: 'FAQ & Support',
             color: themeColor,
             destination: FaqScreen(themeColor: themeColor),
+          ),
+
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.logout, color: Colors.red),
+            title: const Text(
+              'Logout',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: Colors.red,
+              ),
+            ),
+            trailing: const Icon(Icons.chevron_right, size: 18, color: Colors.red),
+            onTap: () {
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Logout'),
+                  content: const Text('Are you sure you want to sign out of Darbar?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                      onPressed: () async {
+                        Navigator.pop(context); // Close dialog
+                        Navigator.pop(context); // Close drawer
+                        final appState = Provider.of<AppStateProvider>(context, listen: false);
+                        await appState.clearSession();
+                        Navigator.pushAndRemoveUntil(
+                          context,
+                          MaterialPageRoute(builder: (context) => const LoginScreen()),
+                          (route) => false,
+                        );
+                      },
+                      child: const Text('Logout'),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
 
           const Spacer(),

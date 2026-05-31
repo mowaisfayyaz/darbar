@@ -31,9 +31,11 @@ The platform supports three distinct types of users, each with tailored interfac
 
 Recently added features to elevate platform robustness and user experience:
 - **Navigation App Drawer & Info Hub**: A responsive, theme-aware side navigation drawer containing links to **About Us**, a **Contact Us** query form, and an interactive **FAQ & Support** center.
-- **Clickable Service Gigs**: Provides interactive detail modal views containing pricing ranges, estimated completion times, and full descriptions, accompanied by a custom bottom sheet showing all provider gigs if they exceed 3 items.
-- **Customer Reviews Sheet**: Capped main reviews lists to 3 items, adding an interactive slide-up bottom sheet detailing the provider's complete historical customer reviews.
-- **6-Gig Safeguard Check**: Implemented frontend and backend limits preventing providers from exceeding 6 service listings.
+- **Admin Panel Desktop Responsiveness**: Wrapped the Operations dashboard tabs inside centered, maximum width bounds (`850px`) preventing visual stretching on wide screen viewport environments.
+- **Natural Language Booking Scheduling**: AI extracts natural language time preferences (e.g. *"2pm"*, *"tomorrow afternoon"*) in Roman Urdu and English. The Django backend parses these into aware datetimes, displaying them dynamically on both client bookings and provider cards.
+- **Centered Navigation Rails**: Added vertical centering alignment (`groupAlignment: 0.0`) to left NavigationRails on wider displays for improved desktop ergonomics.
+- **Premium Auth Flow & Drawer Logout**: Optimized the Sign-In button to remain brand blue and validate inputs on-tap, and added a red Logout action item to the drawer with confirmation dialog and cache session eviction.
+- **Clickable Gigs & Review Sheets**: Interactive detail modal views containing pricing ranges, estimated completion times, and full descriptions, accompanied by a custom reviews bottom sheet.
 
 ---
 

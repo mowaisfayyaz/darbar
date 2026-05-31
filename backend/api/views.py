@@ -258,16 +258,66 @@ def process_request(request):
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+def parse_scheduled_time(time_str):
+    if not time_str:
+        return None
+    from django.utils import timezone
+    import datetime
+    import re
+    
+    time_str_clean = time_str.strip().lower()
+    if time_str_clean in ('unknown', 'flexible', 'as soon as possible', 'asap', 'none', 'anytime'):
+        return timezone.now()
+        
+    now = timezone.now()
+    target_date = now.date()
+    
+    # If "tomorrow" or "kal" is in time_str_clean
+    if 'tomorrow' in time_str_clean or 'kal' in time_str_clean:
+        target_date += datetime.timedelta(days=1)
+    
+    # Try to find a simple time like "2pm", "2:00 pm", "2:30 pm", "14:00"
+    time_match = re.search(r'(\d{1,2})(?::(\d{2}))?\s*(am|pm)?', time_str_clean)
+    if time_match:
+        try:
+            hour = int(time_match.group(1))
+            minute = int(time_match.group(2)) if time_match.group(2) else 0
+            meridiem = time_match.group(3)
+            
+            if meridiem == 'pm' and hour < 12:
+                hour += 12
+            elif meridiem == 'am' and hour == 12:
+                hour = 0
+                
+            parsed_dt = datetime.datetime.combine(target_date, datetime.time(hour, minute))
+            return timezone.make_aware(parsed_dt, timezone.get_current_timezone())
+        except Exception:
+            pass
+            
+    # Try dateutil parser as fallback
+    try:
+        from dateutil import parser
+        parsed_dt = parser.parse(time_str, default=datetime.datetime.combine(target_date, datetime.time(12, 0)))
+        if parsed_dt.tzinfo is None:
+            parsed_dt = timezone.make_aware(parsed_dt, timezone.get_current_timezone())
+        return parsed_dt
+    except Exception:
+        pass
+        
+    # Default to now if couldn't parse but wasn't empty
+    return now
+
 @api_view(['POST'])
 def select_provider(request):
     """
     Client selection confirmation endpoint.
-    Expects: {"user_id": "uuid", "provider_id": "uuid", "service_type": "Plumber", "location": "G-13"}
+    Expects: {"user_id": "uuid", "provider_id": "uuid", "service_type": "Plumber", "location": "G-13", "scheduled_time": "2:00 PM"}
     """
     user_id = request.data.get('user_id')
     provider_id = request.data.get('provider_id')
     service_type = request.data.get('service_type', 'Unknown')
     location = request.data.get('location', 'Unknown')
+    scheduled_time_raw = request.data.get('scheduled_time')
 
     if not user_id or not provider_id:
         return Response({"error": "user_id and provider_id are required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -281,13 +331,16 @@ def select_provider(request):
     try:
         # Create the booking
         booking_id_human = f"BK-2026-{get_random_string(6).upper()}"
+        scheduled_time = parse_scheduled_time(scheduled_time_raw)
+        
         booking = Booking.objects.create(
             booking_id=booking_id_human,
             user=user,
             provider=provider,
             service_type=service_type,
             location=location,
-            status='pending'
+            status='pending',
+            scheduled_time=scheduled_time
         )
 
         # Log the selection
@@ -323,6 +376,7 @@ def select_provider(request):
             "message": reasoning,
             "service_type": booking.service_type,
             "location": booking.location,
+            "scheduled_time": booking.scheduled_time.isoformat() if booking.scheduled_time else None,
             "provider_name": provider.business_name,
             "provider_rating": provider.rating,
             "provider_phone": provider.phone,

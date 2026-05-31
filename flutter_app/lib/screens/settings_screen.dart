@@ -397,8 +397,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: primaryColor,
       ),
-      body: ListView(
-        children: [
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 850),
+          child: ListView(
+            children: [
           const SizedBox(height: 20),
           
           // Profile Details Card
@@ -703,6 +706,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 20),
         ],
       ),
+          ),
+        ),
     );
   }
 }
