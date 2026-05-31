@@ -25,7 +25,7 @@ This document outlines the step-by-step developer environment setup for both the
 
    Alternatively, you can use the shortcut:
 
-. .venv/bin/activate
+   source .venv/bin/activate
    ```
 
 3. **Install Core Dependencies**:
@@ -122,3 +122,10 @@ GOOGLE_REDIRECT_URI="http://127.0.0.1:8000/api/auth/google/callback/"
    `http://127.0.0.1:8000/api/auth/google/callback/`
 6. Copy the generated **Client ID** and **Client Secret** into your `backend/.env` file.
 7. Open Darbar, go to the Settings interface, click **Connect Google Account**, authorize the scopes, and you are set.
+
+
+APk Downloading command:
+
+Run it from /home/mannan/darbar/flutter_app
+flutter build apk --release
+

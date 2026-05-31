@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/api_service.dart';
@@ -18,11 +19,34 @@ class _BookingsScreenState extends State<BookingsScreen> {
   List<dynamic> _bookings = [];
   bool _isLoading = true;
   String? _error;
+  Timer? _pollTimer;
 
   @override
   void initState() {
     super.initState();
     _fetchBookings();
+    // Auto-refresh every 15 seconds
+    _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      _silentRefresh();
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Silent refresh without showing loading indicator
+  Future<void> _silentRefresh() async {
+    try {
+      final bookings = await _api.getUserBookings(widget.userId);
+      if (mounted) {
+        setState(() {
+          _bookings = bookings;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _fetchBookings() async {
@@ -83,6 +107,8 @@ class _BookingsScreenState extends State<BookingsScreen> {
           ),
         ),
         title: const Text('My Bookings', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFF1565C0),
+        foregroundColor: Colors.white,
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchBookings),
         ],

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/api_service.dart';
@@ -18,11 +19,34 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   List<dynamic> _notifications = [];
   bool _isLoading = true;
   String? _error;
+  Timer? _pollTimer;
 
   @override
   void initState() {
     super.initState();
     _fetchNotifications();
+    // Auto-refresh every 15 seconds
+    _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      _silentRefresh();
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Silent refresh without showing loading indicator
+  Future<void> _silentRefresh() async {
+    try {
+      final data = await _api.getNotifications(widget.userId);
+      if (mounted) {
+        setState(() {
+          _notifications = data;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _fetchNotifications() async {

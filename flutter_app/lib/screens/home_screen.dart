@@ -229,6 +229,8 @@ class _HomeScreenState extends State<HomeScreen> {
             Text('Hello, ${widget.userName ?? 'User'}', style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.7))),
           ],
         ),
+        backgroundColor: const Color(0xFF1565C0),
+        foregroundColor: Colors.white,
         actions: [
           Container(
             margin: const EdgeInsets.only(right: 12),

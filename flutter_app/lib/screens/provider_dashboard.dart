@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/api_service.dart';
@@ -19,11 +20,39 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
   Map<String, dynamic>? _stats;
   bool _isLoading = true;
   String? _error;
+  Timer? _pollTimer;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    // Auto-refresh every 15 seconds
+    _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      _silentRefresh();
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Silent refresh without showing loading indicator
+  Future<void> _silentRefresh() async {
+    try {
+      final bookings = await _api.getProviderBookings(widget.providerId);
+      Map<String, dynamic>? stats;
+      try {
+        stats = await _api.getProviderStats(widget.providerId);
+      } catch (_) {}
+      if (mounted) {
+        setState(() {
+          _bookings = bookings;
+          _stats = stats;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadData() async {

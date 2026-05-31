@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 
 class AboutUsScreen extends StatelessWidget {
-  const AboutUsScreen({super.key});
+  final Color themeColor;
+  const AboutUsScreen({super.key, this.themeColor = const Color(0xFF1565C0)});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('About Us', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF1565C0),
+        backgroundColor: themeColor,
         foregroundColor: Colors.white,
       ),
       body: SingleChildScrollView(
@@ -20,10 +21,10 @@ class AboutUsScreen extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1565C0).withOpacity(0.1),
+                  color: themeColor.withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.music_note, size: 72, color: Color(0xFF1565C0)),
+                child: Icon(Icons.music_note, size: 72, color: themeColor),
               ),
             ),
             const SizedBox(height: 24),
@@ -40,32 +41,35 @@ class AboutUsScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 32),
-            const Text(
+            Text(
               'Our Vision',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1565C0)),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: themeColor),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Darbar Orchestra brings harmony to home and business services. Just like an orchestra combines different instruments to play a beautiful symphony, Darbar orchestrates and unites certified service providers with customers seamlessly using advanced AI intelligence.',
-              style: TextStyle(fontSize: 15, height: 1.5, color: Colors.black87),
+              style: TextStyle(fontSize: 15, height: 1.5, color: Theme.of(context).textTheme.bodyLarge?.color),
             ),
             const SizedBox(height: 24),
-            const Text(
+            Text(
               'How It Works',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1565C0)),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: themeColor),
             ),
             const SizedBox(height: 12),
             _buildFeatureRow(
+              context: context,
               icon: Icons.psychology_outlined,
               title: 'AI Orchestrated Matching',
               desc: 'State-of-the-art AI agents extract customer intent and directly dispatch the top-ranked local providers.',
             ),
             _buildFeatureRow(
+              context: context,
               icon: Icons.gpp_good_outlined,
               title: 'Verified Partners Only',
               desc: 'Every service provider is strictly vetted with certificates, background checks, and rating reviews.',
             ),
             _buildFeatureRow(
+              context: context,
               icon: Icons.speed_outlined,
               title: 'Instant Booking & Alerts',
               desc: 'Book instant services and receive real-time notifications when your provider is accepted, confirmed, or on the way.',
@@ -85,7 +89,7 @@ class AboutUsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildFeatureRow({required IconData icon, required String title, required String desc}) {
+  Widget _buildFeatureRow({required BuildContext context, required IconData icon, required String title, required String desc}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 18.0),
       child: Row(
@@ -94,10 +98,10 @@ class AboutUsScreen extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFF1565C0).withOpacity(0.08),
+              color: themeColor.withOpacity(0.08),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, color: const Color(0xFF1565C0), size: 24),
+            child: Icon(icon, color: themeColor, size: 24),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -106,7 +110,7 @@ class AboutUsScreen extends StatelessWidget {
               children: [
                 Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 4),
-                Text(desc, style: TextStyle(color: Colors.grey.shade700, fontSize: 13, height: 1.4)),
+                Text(desc, style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7), fontSize: 13, height: 1.4)),
               ],
             ),
           ),
@@ -117,7 +121,8 @@ class AboutUsScreen extends StatelessWidget {
 }
 
 class ContactUsScreen extends StatefulWidget {
-  const ContactUsScreen({super.key});
+  final Color themeColor;
+  const ContactUsScreen({super.key, this.themeColor = const Color(0xFF1565C0)});
 
   @override
   State<ContactUsScreen> createState() => _ContactUsScreenState();
@@ -160,7 +165,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Contact Us', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF1565C0),
+        backgroundColor: widget.themeColor,
         foregroundColor: Colors.white,
       ),
       body: SingleChildScrollView(
@@ -175,7 +180,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
             const SizedBox(height: 6),
             Text(
               'Have any queries, suggestions, or issues? Write to us directly.',
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+              style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6), fontSize: 14),
             ),
             const SizedBox(height: 24),
 
@@ -222,7 +227,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
                     height: 48,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1565C0),
+                        backgroundColor: widget.themeColor,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
                       onPressed: _isSending ? null : _sendMessage,
@@ -248,17 +253,17 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
         decoration: BoxDecoration(
-          color: const Color(0xFF1565C0).withOpacity(0.05),
+          color: widget.themeColor.withOpacity(0.05),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFF1565C0).withOpacity(0.1)),
+          border: Border.all(color: widget.themeColor.withOpacity(0.1)),
         ),
         child: Column(
           children: [
-            Icon(icon, color: const Color(0xFF1565C0), size: 28),
+            Icon(icon, color: widget.themeColor, size: 28),
             const SizedBox(height: 8),
             Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             const SizedBox(height: 4),
-            Text(value, style: TextStyle(color: Colors.grey.shade700, fontSize: 11), textAlign: TextAlign.center),
+            Text(value, style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7), fontSize: 11), textAlign: TextAlign.center),
           ],
         ),
       ),
@@ -267,7 +272,8 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
 }
 
 class FaqScreen extends StatelessWidget {
-  const FaqScreen({super.key});
+  final Color themeColor;
+  const FaqScreen({super.key, this.themeColor = const Color(0xFF1565C0)});
 
   @override
   Widget build(BuildContext context) {
@@ -297,7 +303,7 @@ class FaqScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('FAQ & Help', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF1565C0),
+        backgroundColor: themeColor,
         foregroundColor: Colors.white,
       ),
       body: ListView.builder(
@@ -317,7 +323,7 @@ class FaqScreen extends StatelessWidget {
               children: [
                 Text(
                   faq['a']!,
-                  style: TextStyle(color: Colors.grey.shade800, fontSize: 14, height: 1.4),
+                  style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.8), fontSize: 14, height: 1.4),
                 ),
               ],
             ),

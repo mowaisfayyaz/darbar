@@ -465,86 +465,121 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
         Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
       ],
     );
-  }  void _showGigDetails(dynamic gig) {
+  }
+
+  void _showGigDetails(dynamic gig) {
     final photos = gig['photos'] as List?;
     final photoUrl = (photos != null && photos.isNotEmpty) ? photos.first : '';
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        contentPadding: EdgeInsets.zero,
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Stack(
+        clipBehavior: Clip.antiAlias,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.7,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                  child: photoUrl.isNotEmpty
-                      ? Image.network(photoUrl, height: 180, width: double.infinity, fit: BoxFit.cover)
-                      : Container(
-                          height: 180,
-                          width: double.infinity,
-                          color: Colors.green.shade50,
-                          child: const Icon(Icons.image, color: Colors.green, size: 64),
-                        ),
-                ),
-                Positioned(
-                  right: 12,
-                  top: 12,
-                  child: CircleAvatar(
-                    backgroundColor: Colors.black54,
-                    child: IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white),
-                      onPressed: () => Navigator.pop(context),
+                Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                      child: photoUrl.isNotEmpty
+                          ? Image.network(
+                              photoUrl,
+                              height: 180,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              loadingBuilder: (context, child, loadingProgress) {
+                                if (loadingProgress == null) return child;
+                                return Container(
+                                  height: 180,
+                                  width: double.infinity,
+                                  color: Colors.green.shade50,
+                                  child: const Center(
+                                    child: CircularProgressIndicator(color: Colors.green),
+                                  ),
+                                );
+                              },
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  height: 180,
+                                  width: double.infinity,
+                                  color: Colors.green.shade50,
+                                  child: const Icon(Icons.broken_image, color: Colors.green, size: 64),
+                                );
+                              },
+                            )
+                          : Container(
+                              height: 180,
+                              width: double.infinity,
+                              color: Colors.green.shade50,
+                              child: const Icon(Icons.image, color: Colors.green, size: 64),
+                            ),
                     ),
+                    Positioned(
+                      right: 12,
+                      top: 12,
+                      child: CircleAvatar(
+                        backgroundColor: Colors.black54,
+                        child: IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        gig['title'] ?? 'Service Gig',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              'PKR ${gig['price_min']} - PKR ${gig['price_max']}',
+                              style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              const Icon(Icons.access_time, size: 16, color: Colors.grey),
+                              const SizedBox(width: 4),
+                              Text(
+                                gig['estimated_time'] ?? 'Flexible',
+                                style: const TextStyle(color: Colors.grey, fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      const Text('Description', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      const SizedBox(height: 6),
+                      Text(
+                        gig['description'] ?? 'No description provided.',
+                        style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 13, height: 1.4),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    gig['title'] ?? 'Service Gig',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'PKR ${gig['price_min']} - PKR ${gig['price_max']}',
-                        style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 16),
-                      ),
-                      Row(
-                        children: [
-                          const Icon(Icons.access_time, size: 16, color: Colors.grey),
-                          const SizedBox(width: 4),
-                          Text(
-                            gig['estimated_time'] ?? 'Flexible',
-                            style: const TextStyle(color: Colors.grey, fontSize: 13),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('Description', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                  const SizedBox(height: 6),
-                  Text(
-                    gig['description'] ?? 'No description provided.',
-                    style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 13, height: 1.4),
-                  ),
-                ],
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
