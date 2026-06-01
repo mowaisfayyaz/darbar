@@ -46,6 +46,11 @@ class Provider(models.Model):
     profile_photo = models.CharField(max_length=500, blank=True, default='')
     years_of_experience = models.IntegerField(default=0)
 
+    # Added for Apify Integration
+    place_id = models.CharField(max_length=255, blank=True, null=True, unique=True)
+    address = models.TextField(blank=True, null=True)
+    google_maps_url = models.URLField(max_length=500, blank=True, null=True)
+
     def __str__(self):
         return f"{self.business_name} ({self.category})"
 
