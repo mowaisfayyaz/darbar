@@ -1,0 +1,330 @@
+================================================================================
+🏛️ DARBAR — AI-POWERED SERVICE FINDER
+CONCISE END-TO-END FLOW & ARCHITECTURE DOCUMENTATION FOR TEAMS & INTERVIEWS
+================================================================================
+
+This document explains the end-to-end architecture, API integrations, Google OAuth 
+flows, and the multi-agent decision pipeline of the Darbar platform. It is designed
+to help team members and interviewees understand the system logic in simple,
+easy-to-understand English.
+
+---
+
+Table of Contents:
+1. High-Level Architecture Overview
+2. Database Schema and Models (Django ORM)
+3. The Multi-Agent Search and Booking Pipeline (Step-by-Step)
+4. Apify Integration and Google Maps Scraper Flow
+5. Google OAuth 2.0 flow & Gmail Dispatch Mechanism
+6. Google Single-Tap Login Flow
+7. Flutter Frontend & Django Communication Bridge
+
+---
+
+1. HIGH-LEVEL ARCHITECTURE OVERVIEW
+================================================================================
+Darbar is a full-stack platform consisting of two main parts:
+
+A. Flutter Mobile Client:
+   - Built using Flutter/Dart.
+   - Provides a conversational AI Chat Interface where customers describe what
+     they need (e.g., in Roman Urdu: "G-13 me AC technician chahiye kal").
+   - Includes dashboards for Service Providers to manage their availability, 
+     add service offerings (Gigs), view bookings, and set discounts.
+   - Includes an Admin Dashboard to monitor users and toggle background scrapers.
+
+B. Django REST Backend:
+   - Built using Django and Django REST Framework (DRF).
+   - Operates as a REST API that serves data to the Flutter app.
+   - Implements a Multi-Agent AI System to parse queries, find providers, rank
+     them, make decisions, send alerts, and schedule reminders.
+   - Utilizes Supabase PostgreSQL (or local SQLite fallback) as the database.
+   - Utilizes Django's database cache to remember conversational turns.
+
+---
+
+2. DATABASE SCHEMA AND MODELS (api/models.py)
+================================================================================
+The backend database is structured around the following key Django models:
+
+1. User (Customer Profile):
+   - Stores user details: ID (UUID), name, email, phone, hashed password, 
+     and location.
+   - Google Auth fields: `google_email` (Gmail address linked via OAuth) and 
+     `is_google_linked` (boolean).
+   - `is_apify_enabled`: A toggle showing if the customer permits the app to 
+     scrape live providers from Google Maps.
+
+2. Provider (Service Partner Profile):
+   - Stores provider business details: category (e.g., Plumber, AC Technician), 
+     rating (out of 5.0), review count, city, neighborhood/area, and geo-coordinates
+     (latitude and longitude).
+   - Google Auth and Apify toggles (`is_google_linked`, `is_apify_enabled`).
+   - Profile custom additions: years of experience and profile photo URL.
+   - Apify fields: Google Maps `place_id`, full address, and `google_maps_url`.
+
+3. Booking:
+   - Tracks a customer's requested service session.
+   - Fields: unique human-readable reference ID (e.g., `BK-2026-XYZ123`), 
+     relationships to User and Provider, service type, location, status
+     (pending, confirmed, completed, cancelled), and scheduled date-time.
+
+4. BookingAttempt:
+   - Logs each dispatch event. If a booking is dispatched to a provider, a
+     BookingAttempt is created with a status of 'sent', 'accepted', 'timeout',
+     or 'declined'.
+
+5. AgentLog (The "AI Trace" Log):
+   - Essential for transparency. Logs every single action taken by each of the
+     6 AI Agents, including the exact reasoning, timestamps, and API errors.
+   - These logs are returned to the Flutter app so users can see a step-by-step
+     timeline of why a certain provider was matched.
+
+6. ServiceGig (Fiverr-style Offerings):
+   - Providers can create up to 6 service listings (gigs) with a title, 
+     description, image URLs, pricing range, and estimated time.
+
+7. Other Models:
+   - `Review`: Stores customer ratings (1-5) and comments.
+   - `Reminder`: Stores background alert triggers.
+   - `Notification`: In-app notifications for both users and providers.
+   - `SystemSetting`: Operational toggles (e.g., admin-level global Apify switch).
+
+---
+
+3. THE MULTI-AGENT SEARCH & BOOKING PIPELINE
+================================================================================
+When a customer sends a message in the chat, the request hits the backend route:
+`POST /api/request/`. The system triggers a sequential pipeline of 6 agents:
+
+STEP 1: Intent Agent (Parsing and Understanding)
+------------------------------------------------
+- Purpose: Understands what the user wants and extracts structured data:
+  - `service_type` (e.g., Plumber, AC Technician)
+  - `location` (e.g., G-13, E-11)
+  - `time_preference` (e.g., Tomorrow, 2 PM)
+  - `language_detected` ('en', 'ur', or 'ur-roman')
+  - `needs_clarification` (True/False)
+- Conversational Memory (Multi-Turn): 
+  - Before running the LLM, the backend fetches the last 10 turns of chat history 
+    from the Django database cache (`darbar_cache_table`).
+  - If the user previously mentioned "AC Technician" and now just says "G-13",
+    the Intent Agent uses the history to fill in the missing service type.
+- Cascading Fallback Chain: 
+  - To ensure 100% reliability, the Intent Agent attempts to parse the text using 
+    a 4-tier system:
+    1. Tier 1: Minimax m2.5 LLM via opencode.ai completions.
+    2. Tier 2: Google Gemini 1.5 Flash API (used if Minimax fails/rate-limits).
+    3. Tier 3: Groq LLaMA 70B API (used if Gemini fails).
+    4. Tier 4: Zero-latency Local Keyword Fallback parser (if all API keys are 
+       expired or rate-limited, it parses the query using pre-defined python string 
+       regex checks).
+- Output: If any critical detail is missing, it sets `needs_clarification` to True 
+  and returns a polite question asking for details in the user's detected language. 
+  If all parameters are gathered, it continues to the Discovery Agent.
+
+STEP 2: Discovery Agent (Finding Candidates)
+------------------------------------------------
+- Purpose: Finds matching providers in the database.
+- Flow:
+  1. It reads the user's toggle and the admin's global toggle.
+  2. If Apify scraping is enabled, it synchronously launches the Apify scraper 
+     (see Section 4) to fetch Google Maps listings and save them to the DB.
+  3. It matches the location keyword against the database. If it's a neighborhood 
+     name (e.g., "G-13"), it identifies the city (e.g., "Islamabad").
+  4. It queries the local database for available providers matching the service 
+     category and city. If there's coverage in that exact neighborhood, it filters 
+     by neighborhood first. Otherwise, it widens the scope to the whole city.
+
+STEP 3: Ranking Agent (Scoring Candidates)
+------------------------------------------------
+- Purpose: Numerically ranks the discovered candidates.
+- Formula: The agent applies a weighted mathematical algorithm:
+  - Proximity/Distance (40%): Calculates the distance between the target area 
+    (from a hardcoded mapping of coordinates for Islamabad/Karachi areas) and 
+    the provider's location using the Haversine Formula. Closer is scored higher.
+  - Average Star Rating (35%): Out of 5.0 stars.
+  - Review Count / Job Experience (25%): Scored based on the number of completed 
+    jobs, capped at 100 reviews.
+- Output: A sorted list of providers from highest match score to lowest.
+
+STEP 4: Decision Agent (Picking and Explaining)
+------------------------------------------------
+- Purpose: Automates the selection and generates explanation text.
+- Flow:
+  - If no candidates are found, it returns a message saying no providers are 
+    available.
+  - It serializes the top 3 ranked candidates.
+  - It generates a natural language explanation (in English, Urdu, or Roman Urdu 
+    depending on user input) explaining why these providers are recommended 
+    (e.g., "Selected Usman Plumber because they are rated 4.8/5 and are only 1.2km away").
+- UI State: The backend returns this list of candidates to the Flutter app. 
+  The Flutter app stops chat processing and presents the user with a choice of 
+  these top matches.
+
+STEP 5: Booking Agent (Dispatching the Transaction)
+------------------------------------------------
+- Purpose: Dispatches the booking request when a user selects a provider.
+- Path: `POST /api/request/select/`
+- Flow:
+  1. Instantiates a new `Booking` record with status 'pending' and generates a 
+     unique Reference ID (`BK-2026-XXXXXX`).
+  2. Creates a `BookingAttempt` record with status 'sent'.
+  3. Sends in-app Notifications to both User and Provider.
+  4. Gmail Dispatch: If the user's Gmail is linked via Google OAuth, the Booking Agent 
+     dispatches a professional HTML transaction email to the user's Gmail 
+     (see Section 5).
+  5. Pushes a real-time alert to the provider dashboard.
+
+STEP 6: Follow-Up Agent (Background Alerts)
+------------------------------------------------
+- Purpose: Automates time-based notifications.
+- Flow:
+  - If the booking has a specific scheduled time, it creates a `Reminder` record.
+  - Schedules a background task using `APScheduler` (Advanced Python Scheduler) 
+    to trigger an arrival alert to both parties 1 hour prior to the service, 
+    and prompts the user to submit a rating review once the booking status 
+    is marked 'completed' by the provider.
+
+---
+
+4. APIFY INTEGRATION & GOOGLE MAPS SCRAPER FLOW
+================================================================================
+Since Pakistan's informal economy lacks a single database of local technicians,
+Darbar integrates Apify's Google Maps Scraper Actor (`jco0GaQY70XZcwqDI`) to harvest 
+real business data.
+
+Workflow:
+1. Triggering: When `discover_providers` runs, if Apify toggles are enabled, 
+   `trigger_apify_search(category, location)` is called.
+2. Search Query Formulation: It builds a search string (e.g., "Plumber G-13, Pakistan").
+3. Apify Client Request: Using the Apify API token, it runs the scraper actor 
+   configured to scrape up to 5 items.
+4. Data Ingestion: The scraper returns place details: `title`, `phone`, `totalScore`,
+   `reviewsCount`, `address`, `neighborhood`, `latitude`, `longitude`, `placeId`, 
+   and `url`.
+5. Database Upsert:
+   - For each returned item, the service checks if a provider with that Google 
+     Maps `place_id` already exists in the database.
+   - If not, it generates a new UUID, saves the business data to the `Provider` 
+     model, sets the password to a placeholder (`apify_scraped_no_login`), and 
+     sets the provider availability to `True`.
+   - Fallback City Extraction: Google Maps addresses are long strings. The system 
+     uses a helper function `extract_city_from_address` to scan the address or the 
+     location hint against a list of major Pakistani cities (Karachi, Lahore, 
+     Rawalpindi, Islamabad, etc.) to store a clean city name.
+
+---
+
+5. GOOGLE OAUTH 2.0 FLOW & GMAIL DISPATCH MECHANISM
+================================================================================
+Darbar implements a secure, individual-level Google OAuth 2.0 flow to link users' 
+Google Accounts. This allows the system to send transactional HTML emails directly 
+from a verified user's Gmail account rather than a generic noreply email server.
+
+A. The Authorization Flow:
+   1. The user goes to Settings in the Flutter app and taps "Link Google Account".
+   2. The Flutter app requests the authorization URL from the backend:
+      `GET /api/auth/google/url/?user_id=<uuid>&role=customer`.
+   3. The Django backend loads OAuth credentials (`GOOGLE_CLIENT_ID`, 
+      `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI`) from the `.env` file.
+   4. Enforcing Multi-User Mapping via the 'state' Parameter:
+      - Since multiple users might authenticate concurrently, Django encodes 
+        the requesting user's database ID and role as a JSON object: 
+        `{"user_id": "...", "role": "customer"}`.
+      - It passes this JSON string as the secure `state` query parameter to 
+        Google's OAuth URL.
+      - It configures `access_type='offline'` and `prompt='consent'` to ensure 
+        Google returns a long-lived `refresh_token`.
+   5. The Flutter app opens a webview or web page with this Google authorization URL.
+   6. Once the user signs in and grants permissions, Google redirects the browser 
+      to the callback endpoint: `GET /api/auth/google/callback/?code=<code>&state=<state>`.
+
+B. The Callback & Token Exchange:
+   1. The Django view `google_auth_callback` intercepts the request.
+   2. It reads the authorization `code` and makes a secure POST request to 
+      `https://oauth2.googleapis.com/token` to exchange the code for:
+      - `access_token` (short-lived access)
+      - `refresh_token` (long-lived key used to renew expired access tokens)
+   3. It requests the authenticated user's email via the Google UserInfo API.
+   4. It saves the resulting tokens, client ID, client secret, and email to 
+      `google_tokens.json`.
+   5. Database Mapping: It decodes the `state` parameter back into a JSON object 
+      to extract the specific `user_id` and `role`. It looks up that record in the 
+      database and sets `is_google_linked = True` and updates `google_email` with the 
+      retrieved email address.
+   6. It returns a success HTML page with a script that automatically closes the 
+      login window: `window.close()`.
+
+C. Transactional Email Dispatch:
+   1. When the Booking Agent triggers email notification, it calls `send_gmail_message()`.
+   2. The helper loads the credentials from `google_tokens.json`.
+   3. Automatic Token Refreshing: It instantiates the Google API Credentials object. 
+      If the `access_token` is expired, the wrapper automatically calls 
+      `credentials.refresh(Request())` using the stored `refresh_token`, updates 
+      the active token in `google_tokens.json`, and completes the request.
+   4. It builds a MIME multipart HTML email with a premium CSS card design containing 
+      the booking details (Reference ID, category, location, and details of the 
+      assigned provider).
+   5. It encodes the email in base64 format and sends it via the Gmail API endpoint 
+      `service.users().messages().send()`.
+
+---
+
+6. GOOGLE SINGLE-TAP LOGIN FLOW
+================================================================================
+For a seamless login experience, Darbar supports direct Google Sign-In:
+
+1. Request: The client sends a `POST /api/auth/google-login/` with an `id_token` 
+   or `access_token` and the user's role.
+2. Verification:
+   - If an `id_token` is provided, Django calls Google's verification library:
+     `google_id_token.verify_oauth2_token(token, requests.Request(), client_id)` 
+     to cryptographically verify that the token was signed by Google.
+   - If only an `access_token` is provided, Django requests user info from
+     `https://www.googleapis.com/oauth2/v2/userinfo`.
+3. Account Retrieval:
+   - Django extracts the email address and checks the database.
+   - If an account exists with that primary `email` or linked `google_email`, it 
+     immediately links it if not marked, logs the user in, and returns the profile.
+4. Auto-Registration:
+   - If no account exists and the role is 'customer', the system automatically 
+     registers a new customer profile.
+   - It parses the email username as their name, generates a secure random password, 
+     sets a placeholder phone, sets `is_google_linked` to True, and returns the 
+     profile. This provides a zero-barrier login experience.
+
+---
+
+7. FLUTTER FRONTEND & DJANGO COMMUNICATION BRIDGE
+================================================================================
+All networking in the Flutter app is centralized inside the `ApiService` singleton
+class (`lib/services/api_service.dart`).
+
+1. Unified Dio Network Client:
+   - Uses the `Dio` library with configured timeout limits (15s connect, 30s receive).
+   - Registers a request Interceptor: Whenever a network request is dispatched,
+     the interceptor queries `SharedPreferences` for a saved `user_id`. If present, 
+     it automatically appends it as the custom HTTP header `x-provider-id: <user_id>`.
+     This ensures secure, session-like provider authentication even when session 
+     cookies are blocked by CORS across domains.
+
+2. Dynamic Base URL Inference (Critical for Testing):
+   - To make testing easy across local host, Android emulators, and public tunnels, 
+     `ApiService.init()` resolves the target backend URL dynamically on startup:
+     - Check 1 (Query Parameter URL): If the app runs in a browser and contains 
+       an `?api=https://...` query parameter, it strips trailing slashes, appends 
+       `/api`, and overrides the Base URL.
+     - Check 2 (Saved Tunnel URL): It checks SharedPreferences for a saved URL. 
+       If the host has changed (e.g. from local to tunnel), it detects stale tunnels 
+       and ignores them.
+     - Check 3 (Host Inference Fallback): If running on Flutter Web, it reads 
+       the browser's active host scheme and name, and assumes the backend is running 
+       on port 8000 (e.g., `http://<domain>:8000/api`).
+
+3. State Management:
+   - `AppStateProvider` extends `ChangeNotifier`. It manages dark mode state, active 
+     user sessions, and custom avatars.
+   - It updates `SharedPreferences` when users log in or out, and triggers UI 
+     re-renders across the app.
+================================================================================

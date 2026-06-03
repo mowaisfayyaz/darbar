@@ -2,7 +2,7 @@
 
 ## Summary
 
-Transformed the Darbar service booking app from a prototype with 15 critical bugs into a production-grade, hackathon-ready application. All 5 implementation phases completed successfully with **zero compilation errors**.
+Transformed the Darbar service booking app from a prototype with 15 critical bugs into a production-grade, hackathon-ready application. All 6 implementation phases completed successfully with **zero compilation errors**.
 
 ---
 
@@ -44,9 +44,9 @@ Transformed the Darbar service booking app from a prototype with 15 critical bug
 
 | File | What Changed |
 |---|---|
-| `login_screen.dart` | Full dark mode support (was hardcoded white), gradient logo, entrance animations, improved error display, dark mode toggle button |
+| `login_screen.dart` | Removed the Google Sign-In button from the interface (login form goes straight to create account/theme toggles) while preserving underlying helper methods |
 | `register_screen.dart` | Full dark mode, animated role toggle cards, centralized ApiService, session persistence on register |
-| `settings_screen.dart` | Uses centralized ApiService (eliminated 3 hardcoded URLs), logout now clears session from SharedPreferences, graceful OAuth error messages |
+| `settings_screen.dart` | Removed Google Services Integration and Apify Search Integration controls from the user and provider profile settings UI, keeping all underlying logic intact |
 
 ### Phase 5: Documentation (3 files)
 
@@ -55,6 +55,12 @@ Transformed the Darbar service booking app from a prototype with 15 critical bug
 | `readme.md` | Complete rewrite with Mermaid architecture diagram, agent pipeline table, tech stack, setup instructions, hackathon highlights |
 | `antigravity_traces.md` | 4-phase trace log with specific tasks, outcomes, and summary table |
 | `widget_test.dart` | Fixed to match renamed DarbarApp class |
+
+### Phase 6: Admin Panel Responsiveness (1 file)
+
+| File | What Changed |
+|---|---|
+| `admin_panel_screen.dart` | Added vertical spacing between dialog text fields, set responsive width constraints on creation dialogs, and replaced Row layout with Wrap layout for provider list items to prevent text squishing on mobile. |
 
 ---
 

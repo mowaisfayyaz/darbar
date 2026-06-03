@@ -18,6 +18,7 @@ def schedule_reminders(booking_obj):
     Schedules rating request after job time passes.
     If no scheduled_time, logs that reminders were skipped gracefully.
     """
+    
     agent_name = "Follow-Up Agent"
     
     if not booking_obj.scheduled_time:

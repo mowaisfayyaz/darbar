@@ -203,8 +203,8 @@ def process_request(request):
         # Clear session cache since booking intent is fully complete
         cache.delete(session_key)
 
-        # Step 2: Discover providers
-        candidates = discover_providers(intent_data)
+        # Step 2: Discover providers (pass user_id so Apify toggle is checked)
+        candidates, apify_triggered = discover_providers(intent_data, user_id=str(user.id))
         
         # Step 3: Rank candidates
         ranked_candidates = rank_candidates(candidates, target_location=intent_data.get('location', 'Unknown'))

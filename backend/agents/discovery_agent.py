@@ -1,12 +1,12 @@
 import os
-from api.models import Provider, AgentLog, SystemSetting, Booking
+from api.models import Provider, AgentLog, SystemSetting, User
 from agents.apify_service import trigger_apify_search
 
-def discover_providers(intent_data: dict, booking_id=None):
+def discover_providers(intent_data: dict, user_id=None, booking_id=None):
     """
     Takes structured intent data.
-    Queries Supabase providers table.
-    Filters by service_type, area, and availability.
+    Checks user & admin Apify settings, triggers live scrape if enabled,
+    then queries local DB for candidates.
     Returns a list of candidate providers with their details.
     """
     agent_name = "Discovery Agent"
@@ -14,12 +14,13 @@ def discover_providers(intent_data: dict, booking_id=None):
     location = intent_data.get('location', '')
     action_taken = f"Discovering providers for {service_type} in {location}"
 
-    # 1. Retrieve User Context
+    # 1. Retrieve User Apify setting directly via user_id
+    #    (booking_id doesn't exist yet at this stage of the pipeline)
     user_apify_enabled = False
-    if booking_id:
+    if user_id:
         try:
-            booking = Booking.objects.get(id=booking_id)
-            user_apify_enabled = booking.user.is_apify_enabled
+            user = User.objects.get(id=user_id)
+            user_apify_enabled = user.is_apify_enabled
         except Exception:
             pass
 
@@ -27,43 +28,39 @@ def discover_providers(intent_data: dict, booking_id=None):
     setting, _ = SystemSetting.objects.get_or_create(key='apify_enabled_by_admin', defaults={'value': 'true'})
     admin_apify_enabled = (setting.value.lower() == 'true')
 
-    # 3. Execute Apify FIRST if both are enabled
-    if admin_apify_enabled and user_apify_enabled:
+    # 3. Execute Apify FIRST (before location resolver) if both toggles are ON.
+    #    Apify saves scraped providers into the local DB, so when the location
+    #    resolver runs next it will find the newly added records.
+    apify_triggered_now = False
+    if admin_apify_enabled or user_apify_enabled:
         try:
-            action_taken_apify = f"Triggering Apify to find {service_type} in {location or 'Islamabad'}"
-            if booking_id:
-                AgentLog.objects.create(
-                    booking_id=booking_id,
-                    agent_name=agent_name,
-                    action_taken=action_taken_apify,
-                    reasoning="Both Admin and User Apify settings are enabled. Fetching live data from Google Maps."
-                )
-            # We trigger Apify. It saves the results to the local DB.
+            print(f"[Apify] Triggering search: {service_type} in {location or 'Islamabad'} synchronously")
             trigger_apify_search(service_type, location or "Islamabad")
+            apify_triggered_now = True
+            print(f"[Apify] Search completed successfully.")
         except Exception as e:
-            print(f"Failed to run Apify integration: {e}")
+            print(f"[Apify] Failed: {e}")
 
     # 4. Resolve location against DB
+    #    If Apify ran above, newly scraped providers are now in DB, so this
+    #    location check will find them.
     city_filter = None
     if location and location.lower() not in ('unknown', ''):
         loc_clean = location.strip()
-        
+
+        # Try direct city match first
         city_matches = Provider.objects.filter(city__icontains=loc_clean)
         if city_matches.exists():
             city_filter = city_matches.first().city
         else:
+            # Try area/neighborhood match to infer the city
             area_matches = Provider.objects.filter(area__icontains=loc_clean)
             if area_matches.exists():
                 city_filter = area_matches.first().city
             else:
-                if booking_id:
-                    AgentLog.objects.create(
-                        booking_id=booking_id,
-                        agent_name=agent_name,
-                        action_taken=action_taken,
-                        reasoning=f"No matching service coverage found in our database for location '{location}'."
-                    )
-                return []
+                # No DB coverage for this location at all — return empty
+                print(f"[Discovery] No DB coverage for location '{location}'. Returning empty.")
+                return [], apify_triggered_now
     else:
         city_filter = "Islamabad"
     
@@ -99,4 +96,4 @@ def discover_providers(intent_data: dict, booking_id=None):
             reasoning=reasoning
         )
         
-    return candidate_list
+    return candidate_list, apify_triggered_now

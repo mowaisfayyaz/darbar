@@ -434,29 +434,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                           : const Text('Sign In', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                     ),
                   ),
-                  const SizedBox(height: 16),
-
-                  // Google Sign-In Button
-                  SizedBox(
-                    height: 52,
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: isDark ? Colors.grey[700]! : Colors.grey[300]!),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        foregroundColor: isDark ? Colors.white : Colors.black87,
-                      ),
-                      icon: Image.network(
-                        'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/1024px-Google_%22G%22_logo.svg.png',
-                        height: 20,
-                        errorBuilder: (_, __, ___) => const Icon(Icons.g_mobiledata, size: 24, color: Colors.blue),
-                      ),
-                      label: const Text(
-                        'Sign In with Google',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                      ),
-                      onPressed: _isLoading ? null : () => _loginWithGoogle(appState),
-                    ),
-                  ),
                   const SizedBox(height: 24),
 
                   // Register link

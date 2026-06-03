@@ -128,6 +128,6 @@ APk Downloading command:
 
 Run it from /home/mannan/darbar/flutter_app
 flutter build apk --release
-
+      
 
 listen creating a movile app was mandatory which we have created and there is an optional requirement for web as well so we already have web view but we just have to make it good responsive like a desktop view so don't change any single part of functionality everything is working  absolutely fine just improve the web responsiveness 
